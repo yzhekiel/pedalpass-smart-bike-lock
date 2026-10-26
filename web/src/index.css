@@ -1,0 +1,105 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  --color-background: #f7f9fd;
+  --color-surface: #f7f9fd;
+  --color-surface-dim: #d1dbf0;
+  --color-surface-bright: #ffffff;
+  --color-surface-variant: #d5e1f8;
+  --color-surface-container-lowest: #ffffff;
+  --color-surface-container-low: #f0f4fd;
+  --color-surface-container: #e5edf9;
+  --color-surface-container-high: #d9e4f5;
+  --color-surface-container-highest: #cfdcf1;
+  --color-on-surface: #0a1b38;
+  --color-on-surface-variant: #364660;
+  --color-inverse-surface: #12213d;
+  --color-inverse-on-surface: #edf2fc;
+  --color-outline: #5c6e8b;
+  --color-outline-variant: #bdcbe2;
+  --color-surface-tint: #0b2984;
+  
+  /* DYCI Official Royal / Navy Blue (from seal ring) */
+  --color-primary: #0b2984;
+  --color-on-primary: #ffffff;
+  --color-primary-container: #1539a2;
+  --color-on-primary-container: #f4f7ff;
+  --color-inverse-primary: #8ea7ff;
+  
+  /* DYCI Official Warm Gold (from seal field and crest) */
+  --color-primary-fixed: #f5b82e;
+  --color-primary-fixed-dim: #dfa01e;
+  --color-on-primary-fixed: #2b1a00;
+  --color-on-primary-fixed-variant: #6b4700;
+  
+  /* DYCI Deep Slate Blue */
+  --color-secondary: #1e3966;
+  --color-on-secondary: #ffffff;
+  --color-secondary-container: #dce5fa;
+  --color-on-secondary-container: #334a75;
+  --color-secondary-fixed: #dce5fa;
+  --color-secondary-fixed-dim: #b8c8ed;
+  --color-on-secondary-fixed: #091c38;
+  --color-on-secondary-fixed-variant: #28406c;
+  
+  /* DYCI Amber Gold */
+  --color-tertiary: #c48600;
+  --color-on-tertiary: #ffffff;
+  --color-tertiary-container: #fcd877;
+  --color-on-tertiary-container: #2b1a00;
+  --color-tertiary-fixed: #ffdf8d;
+  --color-tertiary-fixed-dim: #f5b82e;
+  --color-on-tertiary-fixed: #261600;
+  --color-on-tertiary-fixed-variant: #5e3f00;
+  
+  --color-error: #ba1a1a;
+  --color-on-error: #ffffff;
+  --color-error-container: #ffdad6;
+  --color-on-error-container: #93000a;
+}
+
+body {
+  font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  background-color: #f8f9ff;
+  color: #0b1c30;
+  min-height: 100vh;
+}
+
+.material-symbols-outlined {
+  font-family: 'Material Symbols Outlined';
+  font-weight: normal;
+  font-style: normal;
+  font-size: 20px;
+  line-height: 1;
+  display: inline-block;
+  white-space: nowrap;
+  word-wrap: normal;
+  direction: ltr;
+  -webkit-font-feature-settings: 'liga';
+  -webkit-font-smoothing: antialiased;
+  font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+}
+
+.material-symbols-outlined.fill-icon,
+.material-symbols-fill {
+  font-variation-settings: 'FILL' 1, 'wght' 500, 'GRAD' 0, 'opsz' 24 !important;
+}
+
+/* Custom scrollbar hiding */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Web portal: let the screens use the full desktop width next to the sidebar */
+.web-main [class*="max-w-[640px]"],
+.web-main [class*="max-w-[720px]"] {
+  max-width: 1120px;
+  border-left: none;
+  border-right: none;
+  box-shadow: none;
+}

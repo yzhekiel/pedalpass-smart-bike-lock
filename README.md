@@ -1,0 +1,111 @@
+# PedalPass — Campus Bicycle Access System (DYCI)
+
+This folder has two apps that work together:
+
+| Folder | Who uses it | Built with | How to open |
+|---|---|---|---|
+| `mobile/` | **Students & faculty**: scan QR, unlock bike, ride, return, history, report issue | Expo (React Native), SDK 58 | **Expo Go** on your phone |
+| `web/` | **Staff**: security, maintenance, admin monitoring | React + Vite + Tailwind | Browser (Chrome) |
+| `test-qr-codes/` | Printable or on-screen QR codes for testing the scanner | — | Open the PNG and scan it with the app |
+
+Both apps use **mock data** for now (no database yet). See "Next steps" below.
+
+---
+
+## Requirements (install once)
+
+1. **Node.js LTS** from https://nodejs.org (check with `node -v`)
+2. **VS Code** + the **Expo Tools** extension (optional, for autocomplete/debugging)
+3. **Expo Go** from the Play Store on your Android phone
+
+---
+
+## 1) Run the student mobile app (Expo Go)
+
+Open a terminal in VS Code:
+
+```powershell
+cd mobile
+npm install
+npx expo start
+```
+
+- A QR code appears in the terminal. Open **Expo Go** on your phone → **Scan QR code**.
+- Phone and laptop must be on the **same Wi-Fi**.
+- If it won't connect (school Wi-Fi often blocks it), use:
+  `npx expo start --tunnel`
+- After editing code, save the file; the app reloads on your phone. Press `r` in the terminal to reload manually.
+
+**Try the flow:** Sign In → Scan (allow camera) → scan `test-qr-codes/BP-001.png` from your laptop screen
+(or tap a demo bike button / "Enter Code") → Unlock → Active Ride → End Ride → History.
+
+> If Expo Go says the project's SDK is not supported, update Expo Go from the Play Store.
+> This project uses **Expo SDK 58**.
+
+## 2) Run the staff web portal
+
+In a second terminal:
+
+```powershell
+cd web
+npm install
+npm run dev
+```
+
+Open **http://localhost:3000**. Pick a role (Security / Maintenance / Administrator) and sign in
+with any password (the email must end with `@dyci.edu.ph`).
+
+Build for hosting: `npm run build` → upload the `web/dist` folder (Firebase Hosting, Netlify, Vercel).
+
+---
+
+## Next steps (in order)
+
+1. **Supabase (database + login)** — one Supabase project for both apps. The client library is already installed.
+   1. Create a free project at https://supabase.com (region: Singapore is closest).
+   2. Dashboard → **SQL Editor** → New query → paste all of `supabase/schema.sql` → **Run**.
+      This creates the tables (`profiles`, `stations`, `bikes`, `rides`, `work_orders`, `inventory`, `alerts`),
+      the security rules, the `@dyci.edu.ph`-only sign-up rule, and the sample bikes/tickets/parts.
+   3. Copy the **Project URL** (green **Connect** button at the top) and the **Publishable key**
+      (Project Settings → API Keys, starts with `sb_publishable_`) into
+      - `mobile/.env.local` (copy `mobile/.env.example`)
+      - `web/.env` (copy `web/.env.example`)
+   4. **Verification emails (6-digit code)** — sent from a Gmail account so they reach DYCI Outlook inboxes:
+      1. On the Gmail account: turn on 2-Step Verification, then create an App Password at
+         https://myaccount.google.com/apppasswords (name it "PedalPass", copy the 16-letter password).
+      2. Supabase → Authentication → Emails → **SMTP Settings** → enable custom SMTP:
+         host `smtp.gmail.com`, port `587`, username = the Gmail address, password = the App Password,
+         sender email = the Gmail address, sender name `PedalPass`.
+      3. Supabase → Authentication → Emails → Templates → **Confirm signup**: paste
+         `supabase/email-templates/confirm-signup.html` (it sends the code instead of a link).
+      4. Make sure Authentication → Sign In / Providers → Email → **Confirm email** is ON.
+      - First emails may land in Outlook's **Junk** folder — mark them "Not junk".
+      - Quick testing without email: turn **Confirm email** off; accounts work right after sign-up.
+   5. Staff accounts (web portal): create them in Authentication → Users → **Add user** (tick "Auto confirm"),
+      then set their role in the SQL Editor (examples at the bottom of `schema.sql`).
+   - Free projects pause after ~1 week with no activity — open the dashboard before a demo.
+   - Remaining work: replace the `// TODO:` comments in the code (search for `TODO` in VS Code).
+2. **Real smart lock (Bluetooth)** — Expo Go cannot use Bluetooth. When the ESP32 lock is ready:
+   ```powershell
+   cd mobile
+   npx expo install expo-dev-client react-native-ble-plx
+   npx expo run:android      # needs Android Studio, or use: npx eas-cli build --profile development
+   ```
+   Then replace the fake functions in `mobile/src/services/lockService.ts`. No screen changes needed.
+3. **Usability testing** with students (SUS / ISO 25010 questionnaire) for your study.
+
+## Project structure
+
+```
+mobile/
+  App.tsx                     screen switching + app state (rides, bikes)
+  src/screens/                Login, Register, Home, Scan, ActiveRide, RideHistory, ReportIssue
+  src/components/             UI kit (ui.tsx), Icon, PedalPassLogo, BottomNavBar
+  src/services/lockService.ts SIMULATED smart lock (replace with BLE later)
+  src/data/mockData.ts        sample users, bikes, rides
+  src/theme.ts                DYCI colors
+web/
+  src/App.tsx                 staff portal layout (sidebar, role-based pages)
+  src/components/             Login, Security, Maintenance, Work Order, Admin, Inventory, Report
+  src/data/mockData.ts        sample data
+```
