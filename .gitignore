@@ -1,0 +1,19 @@
+# Installed packages — run `npm install` in mobile/ and web/ to get them back
+node_modules/
+
+# Supabase keys — recreate from the .env.example files on each computer
+.env
+.env.local
+*.env.local
+
+# Build output
+dist/
+.expo/
+web-build/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+
+# Local AI agent tooling
+.claude/

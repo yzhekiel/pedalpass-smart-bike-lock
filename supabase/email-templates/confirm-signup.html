@@ -1,0 +1,14 @@
+<!--
+  Supabase dashboard → Authentication → Emails → Templates → "Confirm signup"
+  Subject: Your PedalPass verification code
+  Paste everything below into the message body. {{ .Token }} becomes the 6-digit code.
+-->
+<div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto; padding: 24px; color: #0a1b38;">
+  <h2 style="color: #0b2984; margin: 0 0 8px;">PedalPass</h2>
+  <p style="margin: 0 0 16px;">DYCI Campus Bicycle Access</p>
+  <p>Enter this code in the PedalPass app to verify your school email:</p>
+  <p style="font-size: 32px; font-weight: bold; letter-spacing: 8px; background: #eef1fb; padding: 16px; text-align: center; border-radius: 12px;">
+    {{ .Token }}
+  </p>
+  <p style="font-size: 13px; color: #555;">The code expires in 1 hour. If you didn't create a PedalPass account, you can ignore this email.</p>
+</div>
