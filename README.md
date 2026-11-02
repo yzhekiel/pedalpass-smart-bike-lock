@@ -65,12 +65,19 @@ Build for hosting: `npm run build` → upload the `web/dist` folder (Firebase Ho
    1. Create a free project at https://supabase.com (region: Singapore is closest).
    2. Dashboard → **SQL Editor** → New query → paste all of `supabase/schema.sql` → **Run**.
       This creates the tables (`profiles`, `stations`, `bikes`, `rides`, `work_orders`, `inventory`, `alerts`),
-      the security rules, the `@dyci.edu.ph`-only sign-up rule, and the sample bikes/tickets/parts.
+      the security rules, and the sample bikes/tickets/parts.
+      Then run `supabase/migrations/002_identity_verification.sql` the same way. It allows any email to sign up
+      and adds the identity check: riders upload their school ID, COR and a selfie (private storage), and
+      admin/security approve them on the web portal's **Identity Approvals** page. Only approved riders can ride.
+      That page runs a free, open-source AI check in the staff's browser to help them decide:
+      face match between the ID photo and the selfie (Human, models in `web/public/models`) and the
+      student number read from the ID/COR (Tesseract.js). Staff still make the final decision.
    3. Copy the **Project URL** (green **Connect** button at the top) and the **Publishable key**
       (Project Settings → API Keys, starts with `sb_publishable_`) into
       - `mobile/.env.local` (copy `mobile/.env.example`)
       - `web/.env` (copy `web/.env.example`)
-   4. **Verification emails (6-digit code)** — sent from a Gmail account so they reach DYCI Outlook inboxes:
+   4. **Verification emails (6-digit code)** — sent from a Gmail account
+      (DYCI's Microsoft 365 blocks these, so riders should sign up with a personal email):
       1. On the Gmail account: turn on 2-Step Verification, then create an App Password at
          https://myaccount.google.com/apppasswords (name it "PedalPass", copy the 16-letter password).
       2. Supabase → Authentication → Emails → **SMTP Settings** → enable custom SMTP:
@@ -78,8 +85,9 @@ Build for hosting: `npm run build` → upload the `web/dist` folder (Firebase Ho
          sender email = the Gmail address, sender name `PedalPass`.
       3. Supabase → Authentication → Emails → Templates → **Confirm signup**: paste
          `supabase/email-templates/confirm-signup.html` (it sends the code instead of a link).
-      4. Make sure Authentication → Sign In / Providers → Email → **Confirm email** is ON.
-      - First emails may land in Outlook's **Junk** folder — mark them "Not junk".
+      4. Make sure Authentication → Sign In / Providers → Email → **Confirm email** is ON
+         and **Email OTP Length** is 6.
+      - First emails may land in the **Spam / Junk** folder — mark them "Not spam".
       - Quick testing without email: turn **Confirm email** off; accounts work right after sign-up.
    5. Staff accounts (web portal): create them in Authentication → Users → **Add user** (tick "Auto confirm"),
       then set their role in the SQL Editor (examples at the bottom of `schema.sql`).

@@ -16,6 +16,7 @@ import { ActiveRideScreen, BikeCondition } from './src/screens/ActiveRideScreen'
 import { RideHistoryScreen } from './src/screens/RideHistoryScreen';
 import { ReportIssueScreen } from './src/screens/ReportIssueScreen';
 import { VerifyEmailScreen } from './src/screens/VerifyEmailScreen';
+import { VerifyIdentityScreen } from './src/screens/VerifyIdentityScreen';
 
 /**
  * PedalPass — Student / Faculty mobile app (Expo).
@@ -36,7 +37,7 @@ export default function App() {
   const [pendingEmail, setPendingEmail] = useState(''); // waiting for its 6-digit code
 
   const user = profile ?? (role === 'faculty' ? USER_PROFILES.faculty : USER_PROFILES.student);
-  const loggedIn = screen !== 'login' && screen !== 'register' && screen !== 'verify_email';
+  const loggedIn = !['login', 'register', 'verify_email', 'verify_identity'].includes(screen);
 
   // Stay signed in between app launches
   React.useEffect(() => {
@@ -48,10 +49,17 @@ export default function App() {
       .catch(() => {});
   }, []);
 
+  // Riders must pass the identity check (school ID + COR + selfie) before using the app
   const signedIn = (p: UserProfile) => {
     setProfile(p);
     setRole(p.role);
-    setScreen('home');
+    setScreen(p.verificationStatus && p.verificationStatus !== 'approved' ? 'verify_identity' : 'home');
+  };
+
+  const logOut = () => {
+    if (profile) signOut();
+    setProfile(null);
+    setScreen('login');
   };
 
   const needsVerification = (email: string) => {
@@ -117,9 +125,7 @@ export default function App() {
             Alert.alert('Active ride', 'End your ride before logging out.');
             return;
           }
-          if (profile) signOut();
-          setProfile(null);
-          setScreen('login');
+          logOut();
         },
       },
     ]);
@@ -147,6 +153,9 @@ export default function App() {
         )}
         {screen === 'verify_email' && (
           <VerifyEmailScreen email={pendingEmail} onNavigate={setScreen} onVerified={signedIn} />
+        )}
+        {screen === 'verify_identity' && profile && (
+          <VerifyIdentityScreen profile={profile} onProfileChange={signedIn} onLogout={logOut} />
         )}
         {screen === 'home' && <HomeScreen user={user} onNavigate={setScreen} activeBike={activeBike} />}
         {screen === 'scan' && (

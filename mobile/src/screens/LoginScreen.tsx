@@ -40,8 +40,8 @@ export function LoginScreen({ onNavigate, onSetRole, onSignedIn, onNeedsVerifica
       onNavigate('home');
       return;
     }
-    if (!/^[^\s@]+@dyci\.edu\.ph$/i.test(identifier.trim())) {
-      Alert.alert('School email required', 'Sign in with your full @dyci.edu.ph email address.');
+    if (!identifier.includes('@')) {
+      Alert.alert('Email required', 'Sign in with the email address you registered with.');
       return;
     }
     setSigningIn(true);
@@ -104,11 +104,11 @@ export function LoginScreen({ onNavigate, onSetRole, onSignedIn, onNeedsVerifica
 
       <Card style={{ gap: 14 }}>
         <Field
-          label="Institutional Email"
+          label="Email Address"
           icon="badge"
           value={identifier}
           onChangeText={setIdentifier}
-          placeholder="e.g. 22-0481@dyci.edu.ph"
+          placeholder="The email you registered with"
           keyboardType="email-address"
         />
         <Field
@@ -132,7 +132,7 @@ export function LoginScreen({ onNavigate, onSetRole, onSignedIn, onNeedsVerifica
             </Row>
           </Pressable>
           <Pressable
-            onPress={() => Alert.alert('Password reset', 'A reset link was sent to your DYCI school email.')}
+            onPress={() => Alert.alert('Password reset', 'A reset link was sent to your email.')}
           >
             <T variant="small" style={{ color: colors.primary, fontWeight: '700' }}>
               Forgot password?

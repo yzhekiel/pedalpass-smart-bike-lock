@@ -65,7 +65,7 @@ export function VerifyEmailScreen({ email, onNavigate, onVerified }: Props) {
           {email}
         </T>
         <T variant="tiny" style={{ textAlign: 'center' }}>
-          Open Outlook (your DYCI email). If you don't see it, check the Junk folder.
+          Check your email inbox. If you don't see it, look in Spam or Junk.
         </T>
       </Card>
 

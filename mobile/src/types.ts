@@ -2,6 +2,7 @@ export type ScreenType =
   | 'login'
   | 'register'
   | 'verify_email'
+  | 'verify_identity'
   | 'home'
   | 'scan'
   | 'active_ride'
@@ -28,7 +29,12 @@ export interface UserProfile {
   email: string;
   avatarUrl: string;
   isVerified: boolean;
+  /** Identity check (school ID + COR + selfie). Absent in mock-data mode. */
+  verificationStatus?: VerificationStatus;
+  rejectionReason?: string;
 }
+
+export type VerificationStatus = 'needs_documents' | 'pending_review' | 'approved' | 'rejected';
 
 export interface BicycleItem {
   id: string; // e.g. "BP-001"

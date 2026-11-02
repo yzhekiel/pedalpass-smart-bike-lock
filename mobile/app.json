@@ -30,6 +30,13 @@
           "cameraPermission": "PedalPass uses the camera to scan the QR code on campus bicycles.",
           "recordAudioAndroid": false
         }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "cameraPermission": "PedalPass uses the camera to photograph your school ID, COR and a selfie for identity verification.",
+          "photosPermission": "PedalPass lets you choose a photo of your school ID or COR for identity verification."
+        }
       ]
     ]
   }

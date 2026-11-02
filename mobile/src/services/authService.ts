@@ -1,12 +1,13 @@
 /**
  * Sign in / sign up with Supabase Auth.
  *
- * Sign-up flow: signUp() → Supabase emails a 6-digit code → verifyCode() → signed in.
- * The database trigger (supabase/schema.sql → handle_new_user) creates the "profiles" row
- * and rejects any email that is not @dyci.edu.ph.
+ * Sign-up flow: signUp() → Supabase emails a 6-digit code → verifyCode() → signed in
+ * → upload school ID, COR and selfie → submitVerification() → staff approve in the web portal.
+ * The database trigger (supabase/schema.sql → handle_new_user) creates the "profiles" row.
  */
+import { decode } from 'base64-arraybuffer';
 import { supabase } from '../lib/supabase';
-import { UserProfile } from '../types';
+import { UserProfile, VerificationStatus } from '../types';
 
 export type SignUpInput = {
   email: string;
@@ -32,6 +33,8 @@ type ProfileRow = {
   department: string | null;
   avatar_url: string | null;
   is_verified: boolean;
+  verification_status: VerificationStatus;
+  rejection_reason: string | null;
 };
 
 const toProfile = (row: ProfileRow): UserProfile => ({
@@ -47,6 +50,8 @@ const toProfile = (row: ProfileRow): UserProfile => ({
   department: row.department ?? undefined,
   avatarUrl: row.avatar_url ?? '',
   isVerified: row.is_verified,
+  verificationStatus: row.verification_status,
+  rejectionReason: row.rejection_reason ?? undefined,
 });
 
 /** Turns Supabase's English error messages into something a student understands. */
@@ -56,7 +61,7 @@ function friendly(message: string): string {
   if (m.includes('email not confirmed')) return 'Your email is not verified yet.';
   if (m.includes('token has expired') || m.includes('otp')) return 'That code is wrong or has expired. Request a new one.';
   if (m.includes('rate limit') || m.includes('security purposes')) return 'Too many attempts. Wait a minute and try again.';
-  if (m.includes('database error saving new user')) return 'Only @dyci.edu.ph email addresses can register.';
+  if (m.includes('database error saving new user')) return 'Could not create the account. Try again later.';
   if (m.includes('network')) return 'No internet connection.';
   return message;
 }
@@ -122,6 +127,23 @@ export async function verifyCode(email: string, code: string): Promise<UserProfi
 export async function resendCode(email: string): Promise<void> {
   const { error } = await supabase.auth.resend({ type: 'signup', email: email.trim().toLowerCase() });
   if (error) throw new AuthError(error.message);
+}
+
+export type VerificationDoc = 'id' | 'cor' | 'selfie';
+
+/** Uploads one verification photo (base64 JPEG from the image picker) to the private bucket. */
+export async function uploadVerificationPhoto(userId: string, doc: VerificationDoc, base64: string): Promise<void> {
+  const { error } = await supabase.storage
+    .from('verification')
+    .upload(`${userId}/${doc}.jpg`, decode(base64), { contentType: 'image/jpeg', upsert: true });
+  if (error) throw new AuthError(error.message);
+}
+
+/** Sends the uploaded photos for staff review. Returns the refreshed profile. */
+export async function submitVerification(userId: string): Promise<UserProfile> {
+  const { error } = await supabase.rpc('submit_verification');
+  if (error) throw new AuthError(error.message);
+  return loadProfile(userId);
 }
 
 export async function signOut(): Promise<void> {

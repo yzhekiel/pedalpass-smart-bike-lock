@@ -10,7 +10,8 @@ export type ScreenType =
   | 'maintenance'
   | 'resolution'
   | 'admin_dashboard'
-  | 'depot_inventory';
+  | 'depot_inventory'
+  | 'verifications';
 
 export type UserRole = 'student' | 'faculty' | 'security' | 'maintenance' | 'admin';
 

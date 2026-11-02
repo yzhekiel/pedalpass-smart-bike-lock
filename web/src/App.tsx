@@ -17,12 +17,14 @@ import { MaintenanceDashboardScreen } from './components/MaintenanceDashboardScr
 import { WorkOrderResolutionScreen } from './components/WorkOrderResolutionScreen';
 import { AdminDashboardScreen } from './components/AdminDashboardScreen';
 import { DepotInventoryScreen } from './components/DepotInventoryScreen';
+import { VerificationsScreen } from './components/VerificationsScreen';
 
 type NavItem = { id: ScreenType; label: string; icon: string };
 
 const NAV: Record<StaffRole, NavItem[]> = {
   admin: [
     { id: 'admin_dashboard', label: 'Overview', icon: 'dashboard' },
+    { id: 'verifications', label: 'Identity Approvals', icon: 'how_to_reg' },
     { id: 'security', label: 'Fleet & Security', icon: 'shield' },
     { id: 'maintenance', label: 'Maintenance', icon: 'build' },
     { id: 'resolution', label: 'Work Order', icon: 'assignment_turned_in' },
@@ -31,6 +33,7 @@ const NAV: Record<StaffRole, NavItem[]> = {
   ],
   security: [
     { id: 'security', label: 'Fleet & Security', icon: 'shield' },
+    { id: 'verifications', label: 'Identity Approvals', icon: 'how_to_reg' },
     { id: 'report_issue', label: 'Report Issue', icon: 'report_problem' },
   ],
   maintenance: [
@@ -225,6 +228,8 @@ export default function App() {
           {screen === 'admin_dashboard' && <AdminDashboardScreen onNavigate={navigate} />}
 
           {screen === 'depot_inventory' && <DepotInventoryScreen onNavigate={navigate} />}
+
+          {screen === 'verifications' && <VerificationsScreen />}
         </div>
       </div>
     </div>

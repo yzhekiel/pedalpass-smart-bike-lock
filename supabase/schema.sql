@@ -2,6 +2,7 @@
 --
 -- How to use: Supabase dashboard → SQL Editor → New query → paste this whole file → Run.
 -- Run it once on a fresh project. Sample data (same as the apps' mockData.ts) is at the bottom.
+-- Then run every file in supabase/migrations/ in number order (002_..., 003_...).
 --
 -- Tables
 --   profiles     one row per signed-in user (students, faculty, staff), linked to auth.users

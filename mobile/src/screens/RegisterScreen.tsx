@@ -21,7 +21,7 @@ export function RegisterScreen({ onNavigate, onSetRole, onSignedIn, onNeedsVerif
   const [role, setRole] = useState<'student' | 'faculty'>('student');
   const [email, setEmail] = useState(demo('al.santos@dyci.edu.ph'));
   const [fullName, setFullName] = useState(demo('Alexis Gabriel Santos'));
-  const [studentId, setStudentId] = useState(demo('22-0481'));
+  const [studentId, setStudentId] = useState(demo('2024-00481'));
   const [course, setCourse] = useState(demo('BS in Information Technology'));
   const [yearLevel, setYearLevel] = useState(demo('3rd Year'));
   const [section, setSection] = useState(demo('BSIT 3-A'));
@@ -34,7 +34,7 @@ export function RegisterScreen({ onNavigate, onSetRole, onSignedIn, onNeedsVerif
     if (timer.current) clearTimeout(timer.current);
   }, []);
 
-  const emailValid = /^[^\s@]+@dyci\.edu\.ph$/i.test(email.trim());
+  const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
   const checks = useMemo(
     () => [
       { label: '8+ characters', ok: password.length >= 8 },
@@ -51,11 +51,16 @@ export function RegisterScreen({ onNavigate, onSetRole, onSignedIn, onNeedsVerif
 
   const submit = async () => {
     if (!emailValid) {
-      Alert.alert('School email required', 'Use your official @dyci.edu.ph email address.');
+      Alert.alert('Check your email', 'Enter a valid email address you can open.');
       return;
     }
     if (!fullName.trim() || !studentId.trim()) {
       Alert.alert('Missing details', 'Full name and school ID are required.');
+      return;
+    }
+    // DYCI student numbers look like 2024-09536 (printed under the photo on the ID)
+    if (role === 'student' && !/^\d{4}-\d{5}$/.test(studentId.trim())) {
+      Alert.alert('Check your Student No.', 'Type it exactly as on your DYCI ID, e.g. 2024-09536.');
       return;
     }
     if (strength < 4) {
@@ -106,41 +111,38 @@ export function RegisterScreen({ onNavigate, onSetRole, onSignedIn, onNeedsVerif
       <Card style={{ backgroundColor: colors.surfaceContainerLow, gap: 6 }}>
         <Row gap={6}>
           <Icon name="verified_user" size={20} color={colors.primary} />
-          <T variant="h3">Campus Domain Enforcement</T>
+          <T variant="h3">DYCI Identity Check</T>
         </Row>
         <T variant="small">
-          Use your official Dr. Yanga's Colleges, Inc. school email (
+          Use an email you can open (Gmail, Yahoo or your school email). After signing up you'll add a photo of your{' '}
           <T variant="small" style={{ fontWeight: '800', color: colors.primary }}>
-            @dyci.edu.ph
-          </T>
-          ).
+            school ID, COR and a selfie
+          </T>{' '}
+          so campus staff can confirm you're a DYCI student or faculty.
         </T>
-        <Row gap={6}>
-          <Icon name="block" size={16} color={colors.error} />
-          <T variant="tiny" style={{ flex: 1 }}>
-            Personal email domains (@gmail, @yahoo, etc.) are blocked by campus policy.
-          </T>
-        </Row>
       </Card>
 
       <Card style={{ gap: 14 }}>
         <Field
-          label="Institutional Email *"
+          label="Email Address *"
           icon="mail"
           value={email}
           onChangeText={setEmail}
+          placeholder="e.g. juan.delacruz@gmail.com"
           keyboardType="email-address"
           hint={
-            <Row gap={4}>
-              <Icon
-                name={emailValid ? 'task_alt' : 'error_outline'}
-                size={15}
-                color={emailValid ? colors.success : colors.error}
-              />
-              <T variant="tiny" style={{ color: emailValid ? colors.success : colors.error, fontWeight: '700' }}>
-                {emailValid ? 'Valid DYCI email' : 'Must end with @dyci.edu.ph'}
-              </T>
-            </Row>
+            email.length > 0 ? (
+              <Row gap={4}>
+                <Icon
+                  name={emailValid ? 'task_alt' : 'error_outline'}
+                  size={15}
+                  color={emailValid ? colors.success : colors.error}
+                />
+                <T variant="tiny" style={{ color: emailValid ? colors.success : colors.error, fontWeight: '700' }}>
+                  {emailValid ? 'Valid email' : 'Enter a valid email address'}
+                </T>
+              </Row>
+            ) : null
           }
         />
 
@@ -169,7 +171,14 @@ export function RegisterScreen({ onNavigate, onSetRole, onSignedIn, onNeedsVerif
       <Card style={{ gap: 12 }}>
         <SectionTitle icon="assignment_ind">Academic Information</SectionTitle>
         <Field label="Full Name" icon="person" value={fullName} onChangeText={setFullName} autoCapitalize="words" />
-        <Field label="School ID Number" icon="pin" value={studentId} onChangeText={setStudentId} />
+        <Field
+          label={role === 'student' ? 'Student No. (as on your ID)' : 'Employee / School ID No.'}
+          icon="pin"
+          value={studentId}
+          onChangeText={setStudentId}
+          placeholder={role === 'student' ? 'e.g. 2024-09536' : undefined}
+          keyboardType={role === 'student' ? 'numbers-and-punctuation' : 'default'}
+        />
         {role === 'student' && (
           <>
             <Field label="Course" icon="auto_stories" value={course} onChangeText={setCourse} autoCapitalize="words" />
@@ -239,7 +248,7 @@ export function RegisterScreen({ onNavigate, onSetRole, onSignedIn, onNeedsVerif
         <View style={{ flex: 1 }}>
           <T variant="h3">Email Verification</T>
           <T variant="tiny">
-            After you submit, a 6-digit code is sent to your DYCI email to activate your bike pass.
+            After you submit, a 6-digit code is sent to your email. Then you'll add your school ID, COR and a selfie.
           </T>
         </View>
       </Card>
