@@ -33,14 +33,18 @@ async function shrink(uri: string, width: number): Promise<string> {
   return result.base64 ?? '';
 }
 
-export async function scanCor(uri: string, width: number): Promise<CorScan> {
+/**
+ * Reads the COR. Also returns the shrunk photo (base64 JPEG) so sign-up can submit the same
+ * photo as the rider's COR requirement for staff review.
+ */
+export async function scanCor(uri: string, width: number): Promise<CorScan & { image: string }> {
   const image = await shrink(uri, width);
   const { data, error } = await supabase.functions.invoke('scan-cor', { body: { image } });
   if (error || !data) throw new Error(FAILED);
   // supabase-js returns the body already parsed when the function replies with JSON
   const scan = typeof data === 'string' ? safeParse(data) : data;
   if (!scan || typeof scan.is_cor !== 'boolean') throw new Error(FAILED);
-  return { ...scan, issues: Array.isArray(scan.issues) ? scan.issues : [] } as CorScan;
+  return { ...(scan as CorScan), issues: Array.isArray(scan.issues) ? scan.issues : [], image };
 }
 
 function safeParse(text: string) {

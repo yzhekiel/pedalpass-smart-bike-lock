@@ -1,22 +1,22 @@
 /**
  * Staff sign-in with Supabase Auth. Only accounts whose role in the "profiles"
- * table is security, maintenance or admin can use the portal (see supabase/schema.sql
+ * table is admin can use the portal (see supabase/migrations/007_user_and_admin_roles.sql
  * for how to promote an account).
  */
 import { supabase } from './supabase';
 import { UserProfile, UserRole } from '../types';
 
-export type StaffRole = Extract<UserRole, 'security' | 'maintenance' | 'admin'>;
+export type StaffRole = Extract<UserRole, 'admin'>;
 export type StaffProfile = UserProfile & { role: StaffRole };
 
-const STAFF_ROLES: UserRole[] = ['security', 'maintenance', 'admin'];
+const STAFF_ROLES: UserRole[] = ['admin'];
 
 async function loadStaffProfile(userId: string): Promise<StaffProfile> {
   const { data, error } = await supabase.from('profiles').select('*').eq('id', userId).single();
   if (error || !data) throw new Error('Your profile could not be loaded.');
   if (!STAFF_ROLES.includes(data.role)) {
     await supabase.auth.signOut();
-    throw new Error('This account is not a staff account. Students and faculty use the mobile app.');
+    throw new Error('This is not an admin account. Riders use the PedalPass mobile app.');
   }
   return {
     id: data.id,

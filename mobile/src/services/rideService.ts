@@ -5,7 +5,8 @@
  * migrations/003_unlock_tokens.sql), so the server decides who may ride which bike.
  */
 import { supabase } from '../lib/supabase';
-import { BicycleItem, RideRecord, WorkOrderItem } from '../types';
+import { BicycleItem, RideRecord, UserProfile, WorkOrderItem } from '../types';
+import { describeInspection, InspectionMode, InspectionResult } from '../components/InspectionSheet';
 
 const PRIORITY_LABEL = {
   P1: 'High Priority (P1)',
@@ -78,7 +79,8 @@ function check<T>(res: { data: T | null; error: { message: string } | null }): T
 }
 
 export async function fetchBikes(): Promise<BicycleItem[]> {
-  return check<BikeRow[]>(await supabase.from('bikes').select('*').order('id')).map(toBike);
+  // Bikes an admin removed (retired, migration 011) are not shown to riders
+  return check<BikeRow[]>(await supabase.from('bikes').select('*').is('retired_at', null).order('id')).map(toBike);
 }
 
 /** The bike as it is right now (null if no such bike). */
@@ -108,9 +110,34 @@ export async function fetchRideHistory(userId: string): Promise<RideRecord[]> {
   return rows.map(toRide);
 }
 
-/** Server checks the rider is approved, has no other ride and the bike is available, then starts the ride. */
-export async function startRide(bikeId: string): Promise<{ rideId: string; startedAt: number }> {
-  const row = check<RideRow>(await supabase.rpc('start_ride', { p_bike_id: bikeId }));
+/** At or below this lock battery (%) a bike is Unavailable — same rule as min_ride_battery() in migration 011. */
+export const LOW_BATTERY = 20;
+export const isLowBattery = (b: BicycleItem) => b.battery <= LOW_BATTERY;
+/** Can be borrowed right now: docked, available and with enough lock battery. */
+export const isReady = (b: BicycleItem) => b.status === 'available' && !isLowBattery(b);
+
+/**
+ * Server checks the QR code is the bike's current one, the rider is approved and has no other ride,
+ * and the bike is available with enough lock battery, then starts the ride.
+ */
+export async function startRide(bikeId: string, qrCode: string): Promise<{ rideId: string; startedAt: number }> {
+  const row = check<RideRow>(await supabase.rpc('start_ride', { p_bike_id: bikeId, p_qr_token: qrCode }));
+  return { rideId: row.id, startedAt: Date.parse(row.started_at) };
+}
+
+/**
+ * Swap during a ride: the server ends the current ride, files a ticket for the old bike (it goes Under
+ * Inspection) and starts the new bike — all or nothing. Returns the new ride.
+ */
+export async function swapBike(
+  rideId: string,
+  newBikeId: string,
+  qrCode: string,
+  reason: string,
+): Promise<{ rideId: string; startedAt: number }> {
+  const row = check<RideRow>(
+    await supabase.rpc('swap_bike', { p_ride_id: rideId, p_new_bike_id: newBikeId, p_qr_token: qrCode, p_reason: reason }),
+  );
   return { rideId: row.id, startedAt: Date.parse(row.started_at) };
 }
 
@@ -171,6 +198,31 @@ export async function submitIssue(r: IssueReport): Promise<WorkOrderItem> {
     status: 'Reported / Queued',
     nodeId: r.bike.nodeId,
   };
+}
+
+/** "Ana Cruz (Student)" — the database fills this in too, but the insert needs a value. */
+export const reporterLabel = (user: UserProfile) => `${user.name} (${user.memberType === 'faculty' ? 'Faculty' : 'Student'})`;
+
+/**
+ * Sends the problems from a borrow/return checklist to maintenance.
+ * Unsafe → P1 (takes the bike out of service if the rider just rode it), reported before
+ * choosing another bike → P2, minor → P3.
+ */
+export async function reportInspection(
+  user: UserProfile,
+  bike: BicycleItem,
+  mode: InspectionMode,
+  result: InspectionResult,
+  keepRiding: boolean,
+): Promise<WorkOrderItem> {
+  const priority = result.unsafe ? 'P1' : keepRiding || mode === 'return' ? 'P3' : 'P2';
+  return submitIssue({
+    reporterId: user.id,
+    reportedBy: reporterLabel(user),
+    bike,
+    priority,
+    issueTitle: describeInspection(mode, result),
+  });
 }
 
 /** Raises an SOS for campus security (shown on the staff web portal). */

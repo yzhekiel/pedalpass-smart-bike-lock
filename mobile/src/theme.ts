@@ -1,50 +1,55 @@
-// PedalPass DYCI color tokens (same values as the web app's index.css)
+// PedalPass mobile theme — light and soft: pale grey background, white rounded cards with soft shadows,
+// pill-shaped fields and buttons, PedalPass navy (the logo's blue) and DYCI gold as the accent.
 export const colors = {
-  background: '#f7f9fd',
-  surface: '#f7f9fd',
+  background: '#f2f3f5',
+  surface: '#f2f3f5',
   surfaceBright: '#ffffff',
-  surfaceContainerLowest: '#ffffff',
-  surfaceContainerLow: '#f0f4fd',
-  surfaceContainer: '#e5edf9',
-  surfaceContainerHigh: '#d9e4f5',
-  onSurface: '#0a1b38',
-  onSurfaceVariant: '#364660',
-  outline: '#5c6e8b',
-  outlineVariant: '#bdcbe2',
+  surfaceContainerLowest: '#ffffff', // cards
+  surfaceContainerLow: '#f7f8fa',
+  surfaceContainer: '#eceef2', // fields, chips, inner panels
+  surfaceContainerHigh: '#e2e5ea',
+  onSurface: '#15171c',
+  onSurfaceVariant: '#6b7080',
+  outline: '#9aa0ac',
+  outlineVariant: '#e4e6eb',
 
-  // DYCI royal / navy blue
+  // PedalPass navy (logo #0B2984): text accents and filled buttons
   primary: '#0b2984',
+  primaryFill: '#0b2984',
   onPrimary: '#ffffff',
   primaryContainer: '#1539a2',
-  onPrimaryContainer: '#f4f7ff',
+  onPrimaryContainer: '#e6ecff',
 
-  // DYCI gold
+  // DYCI gold: the main call to action (Scan / Unlock), active highlights
   gold: '#f5b82e',
-  onGold: '#2b1a00',
+  onGold: '#1f1500',
 
-  secondary: '#1e3966',
-  secondaryContainer: '#dce5fa',
-  onSecondaryContainer: '#334a75',
+  /** Near-black for the floating bottom bar's active tab */
+  ink: '#15171c',
 
-  tertiary: '#c48600',
-  tertiaryContainer: '#fcd877',
+  secondary: '#3b4f80',
+  secondaryContainer: '#e8edfb',
+  onSecondaryContainer: '#22345e',
 
-  success: '#006948',
-  successContainer: '#d3f5e6',
+  tertiary: '#a86f00',
+  tertiaryContainer: '#fdf1d6',
 
-  error: '#ba1a1a',
-  errorContainer: '#ffdad6',
-  onErrorContainer: '#93000a',
+  success: '#0f8a5f',
+  successContainer: '#e2f6ec',
 
-  scrim: 'rgba(33,49,69,0.55)',
+  error: '#d93a3a',
+  errorContainer: '#fde7e7',
+  onErrorContainer: '#8f1515',
+
+  scrim: 'rgba(21,23,28,0.45)',
 };
 
-export const radius = { sm: 8, md: 12, lg: 16, xl: 20, full: 999 };
+export const radius = { sm: 10, md: 16, lg: 24, xl: 28, full: 999 };
 
 export const shadow = {
-  shadowColor: '#0b2984',
-  shadowOpacity: 0.08,
-  shadowRadius: 8,
-  shadowOffset: { width: 0, height: 2 },
+  shadowColor: '#1a1f36',
+  shadowOpacity: 0.07,
+  shadowRadius: 16,
+  shadowOffset: { width: 0, height: 6 },
   elevation: 2,
 };

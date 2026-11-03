@@ -9,7 +9,7 @@ import { resendCode, verifyCode } from '../services/authService';
 type Props = {
   email: string;
   onNavigate: (screen: ScreenType) => void;
-  onVerified: (profile: UserProfile) => void;
+  onVerified: (profile: UserProfile) => void | Promise<void>;
 };
 
 const RESEND_SECONDS = 60;
@@ -34,7 +34,8 @@ export function VerifyEmailScreen({ email, onNavigate, onVerified }: Props) {
     }
     setVerifying(true);
     try {
-      onVerified(await verifyCode(email, digits));
+      // Keeps the button spinning while sign-up uploads the requirement photos
+      await onVerified(await verifyCode(email, digits));
     } catch (e) {
       Alert.alert('Could not verify', (e as Error).message);
       setVerifying(false);
@@ -54,7 +55,7 @@ export function VerifyEmailScreen({ email, onNavigate, onVerified }: Props) {
   return (
     <Screen
       bottomPad={40}
-      header={<Header title="Verify Your Email" subtitle="Account & Identity" onBack={() => onNavigate('login')} />}
+      header={<Header title="Verify Your Email" subtitle="Step 2 of 2 · Account & Identity" onBack={() => onNavigate('login')} />}
     >
       <Card style={{ alignItems: 'center', gap: 8, backgroundColor: colors.secondaryContainer }}>
         <Icon name="mark_email_read" size={40} color={colors.primary} />

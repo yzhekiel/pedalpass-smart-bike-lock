@@ -1,244 +1,265 @@
-import React from 'react';
+/**
+ * Dashboard — the admin home page in a dark card grid: rides and ready bikes with trends, most used bikes,
+ * a rides-per-day line chart, reports (open vs fixed), riders (students vs faculty/staff) and a fleet overview.
+ */
+import React, { useMemo } from 'react';
+import { Donut, TrendChart } from './charts';
 import { ScreenType } from '../types';
 import { StaffProfile } from '../lib/auth';
 import { supabase } from '../lib/supabase';
-import { fetchBikes, fetchOpenWorkOrders, fetchStations, loadingText, useQuery } from '../lib/data';
+import { fetchBikes, fetchWorkOrders, isReady, LOW_BATTERY, loadingText, shownStatus, useQuery } from '../lib/data';
 
 interface AdminDashboardScreenProps {
   profile: StaffProfile;
   onNavigate: (screen: ScreenType) => void;
+  onOpenBike: (bikeId: string) => void;
 }
 
-const HOURS = Array.from({ length: 13 }, (_, i) => i + 6); // 6 AM – 6 PM
-const hourLabel = (h: number) => `${h % 12 || 12} ${h < 12 ? 'AM' : 'PM'}`;
+const DAY = 86400000;
 
 async function load() {
-  const startOfDay = new Date();
-  startOfDay.setHours(0, 0, 0, 0);
-  const [bikes, stations, tickets, profiles, rides, alerts] = await Promise.all([
+  const start = new Date();
+  start.setHours(0, 0, 0, 0);
+  start.setDate(start.getDate() - 59); // this 30 days + the 30 before, for the comparison
+  const [bikes, orders, profiles, rides] = await Promise.all([
     fetchBikes(),
-    fetchStations(),
-    fetchOpenWorkOrders(),
-    supabase.from('profiles').select('role, verification_status'),
-    supabase.from('rides').select('started_at').gte('started_at', startOfDay.toISOString()),
-    supabase.from('alerts').select('id', { count: 'exact', head: true }).eq('resolved', false),
+    fetchWorkOrders(),
+    supabase.from('profiles').select('role, member_type, verification_status'),
+    supabase.from('rides').select('bike_id, started_at').gte('started_at', start.toISOString()).limit(50000),
   ]);
-  for (const r of [profiles, rides, alerts]) if (r.error) throw r.error;
-
-  const riders = profiles.data!.filter((p) => p.role === 'student' || p.role === 'faculty');
-  const perHour = HOURS.map((h) => ({
-    hour: h,
-    count: rides.data!.filter((r) => new Date(r.started_at).getHours() === h).length,
-  }));
+  for (const r of [profiles, rides]) if (r.error) throw r.error;
   return {
     bikes,
-    stations,
-    tickets,
-    students: riders.filter((p) => p.role === 'student').length,
-    faculty: riders.filter((p) => p.role === 'faculty').length,
-    approved: riders.filter((p) => p.verification_status === 'approved').length,
-    ridesToday: rides.data!.length,
-    perHour,
-    openAlerts: alerts.count ?? 0,
+    orders,
+    riders: profiles.data!.filter((p) => p.role === 'user'),
+    rides: rides.data!.map((r) => ({ bikeId: r.bike_id as string, t: Date.parse(r.started_at) })),
   };
 }
 
-export const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = ({ profile, onNavigate }) => {
+export const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = ({ onNavigate, onOpenBike }) => {
   const { data, error } = useQuery(load);
-
-  return (
-    <div className="bg-background text-on-surface antialiased min-h-screen flex flex-col items-center selection:bg-primary selection:text-on-primary font-body-md text-sm pb-24">
-      <div className="w-full max-w-[720px] flex flex-col min-h-screen bg-surface-bright shadow-sm border-x border-surface-container">
-        <header className="sticky top-0 z-30 bg-surface/95 backdrop-blur-md px-4 md:px-6 py-3 flex items-center justify-between shadow-sm">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-primary text-on-primary flex items-center justify-center font-bold text-sm shadow-sm">
-              {profile.name.charAt(0).toUpperCase()}
-            </div>
-            <div>
-              <div className="flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-full bg-primary animate-pulse"></span>
-                <span className="text-[11px] font-bold text-primary tracking-wide">OPERATIONS CONTROL</span>
-              </div>
-              <h1 className="text-sm font-extrabold text-on-surface">{profile.name}</h1>
-              {profile.title && <p className="text-[10px] text-on-surface-variant">{profile.title}</p>}
-            </div>
-          </div>
-          <button
-            onClick={() => onNavigate('depot_inventory')}
-            className="px-3 py-1.5 rounded-lg bg-surface-container text-primary font-bold text-xs hover:bg-surface-container-high"
-          >
-            Parts Inventory
-          </button>
-        </header>
-
-        <main className="flex-1 px-4 md:px-6 py-4 space-y-4">
-          {!data ? (
-            <p className="text-xs text-on-surface-variant">{loadingText(error)}</p>
-          ) : (
-            <Overview data={data} onNavigate={onNavigate} />
-          )}
-        </main>
-      </div>
-    </div>
-  );
+  if (!data) return <p className="px-4 lg:px-8 py-6 text-sm text-on-surface-variant">{loadingText(error)}</p>;
+  return <Dashboard data={data} onNavigate={onNavigate} onOpenBike={onOpenBike} />;
 };
 
-function Overview({ data, onNavigate }: { data: Awaited<ReturnType<typeof load>>; onNavigate: (s: ScreenType) => void }) {
-  const { bikes, stations, tickets } = data;
-  const available = bikes.filter((b) => b.status === 'available').length;
+function Dashboard({
+  data,
+  onNavigate,
+  onOpenBike,
+}: {
+  data: Awaited<ReturnType<typeof load>>;
+  onNavigate: (s: ScreenType) => void;
+  onOpenBike: (id: string) => void;
+}) {
+  const today = new Date().setHours(0, 0, 0, 0);
+  const from30 = today - 29 * DAY;
+  const from60 = today - 59 * DAY;
+
+  const v = useMemo(() => {
+    const last30 = data.rides.filter((r) => r.t >= from30);
+    const prev30 = data.rides.filter((r) => r.t >= from60 && r.t < from30);
+    const perDay = Array.from({ length: 30 }, (_, i) => {
+      const start = from30 + i * DAY;
+      return { t: start, n: last30.filter((r) => r.t >= start && r.t < start + DAY).length };
+    });
+    const usage = new Map<string, number>();
+    for (const r of last30) usage.set(r.bikeId, (usage.get(r.bikeId) ?? 0) + 1);
+    const open = data.orders.filter((o) => o.status !== 'Resolved');
+    const fixed30 = data.orders.filter((o) => o.resolvedAt && Date.parse(o.resolvedAt) >= from30);
+    return {
+      rides30: last30.length,
+      change: prev30.length ? ((last30.length - prev30.length) / prev30.length) * 100 : null,
+      today: last30.filter((r) => r.t >= today).length,
+      perDay,
+      top: [...usage.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3),
+      open,
+      fixed30,
+    };
+  }, [data, from30, from60, today]);
+
+  const { bikes, riders } = data;
+  const ready = bikes.filter(isReady).length;
+  const unavailable = bikes.filter((b) => shownStatus(b) === 'unavailable').length;
   const inUse = bikes.filter((b) => b.status === 'in_use').length;
-  const maint = bikes.filter((b) => b.status === 'maintenance').length;
-  const users = data.students + data.faculty;
-  const peak = Math.max(1, ...data.perHour.map((h) => h.count));
-  const pct = (n: number) => (bikes.length ? Math.round((n / bikes.length) * 100) : 0);
-  const urgent = tickets.filter((t) => t.priority === 'P1');
-  const hubsDown = stations.filter((s) => s.status !== 'optimal');
+  const inspection = bikes.filter((b) => b.status === 'inspection').length;
+  const maintenance = bikes.filter((b) => b.status === 'maintenance').length;
+  const students = riders.filter((p) => p.member_type !== 'faculty').length;
+  const faculty = riders.length - students;
+  const verified = riders.filter((p) => p.verification_status === 'approved').length;
 
   return (
-    <>
-      {/* Alerts */}
-      <section className="space-y-2">
-        <h2 className="text-xs font-bold text-on-surface uppercase tracking-wider">Operational Health</h2>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-          <Card icon="warning" tone="text-tertiary" title={`${tickets.length} open tickets`} text={urgent.length ? `${urgent.length} critical (P1)` : 'None critical'}>
-            <button onClick={() => onNavigate('maintenance')} className="text-[10px] text-primary font-bold hover:underline mt-1 block">
-              Open the work queue
-            </button>
-          </Card>
-          <Card
-            icon="router"
-            tone="text-primary"
-            title={`${stations.length - hubsDown.length}/${stations.length} hubs optimal`}
-            text={hubsDown.length ? hubsDown.map((s) => s.statusMessage ?? s.name).join(', ') : 'No hub warnings'}
+    <div className="px-4 lg:px-8 py-6 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-12 gap-5">
+      {/* Rides */}
+      <Card className="xl:col-span-4" icon="route" title="Rides (30 days)" link={{ label: 'View analytics', onClick: () => onNavigate('analytics') }}>
+        <p className="text-4xl font-bold tracking-tight">{v.rides30.toLocaleString()}</p>
+        <p className="text-sm mt-2 text-on-surface-variant">
+          {v.change !== null && (
+            <span className={`font-semibold mr-1.5 ${v.change >= 0 ? 'text-success' : 'text-error'}`}>
+              {v.change >= 0 ? '↑' : '↓'}
+              {Math.abs(v.change).toFixed(1)}%
+            </span>
+          )}
+          +{v.today} today
+        </p>
+      </Card>
+
+      {/* Ready bikes */}
+      <Card className="xl:col-span-4" icon="pedal_bike" title="Bikes ready to ride" link={{ label: 'View maintenance', onClick: () => onNavigate('maintenance_list') }}>
+        <p className="text-4xl font-bold tracking-tight">
+          {ready}
+          <span className="text-xl text-on-surface-variant font-medium"> / {bikes.length}</span>
+        </p>
+        <p className="text-sm mt-2 text-on-surface-variant">
+          <span className="font-semibold text-primary-light mr-1.5">{inUse} out now</span>
+          {inspection + maintenance + unavailable} unavailable
+        </p>
+      </Card>
+
+      {/* Most used bikes */}
+      <Card className="md:col-span-2 xl:col-span-4" icon="leaderboard" title="Most used bikes">
+        {v.top.length === 0 ? (
+          <p className="text-sm text-on-surface-variant">No rides in the last 30 days.</p>
+        ) : (
+          <ul className="space-y-3">
+            {v.top.map(([id, n], i) => (
+              <li key={id} className="flex items-center gap-3">
+                <span className="w-7 h-7 rounded-full bg-primary-fixed text-on-primary-fixed text-xs font-bold flex items-center justify-center">{i + 1}</span>
+                <button onClick={() => onOpenBike(id)} className="font-mono font-semibold hover:text-primary-light">
+                  {id}
+                </button>
+                <span className="ml-auto text-sm text-on-surface-variant">{n} rides</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Card>
+
+      {/* Rides per day */}
+      <Card className="md:col-span-2 xl:col-span-8" icon="show_chart" title="Statistics" badge="Last 30 days">
+        <p className="text-xs text-on-surface-variant -mt-2 mb-3">Rides started per day</p>
+        <TrendChart
+          points={v.perDay.map((p) => {
+            const label = new Date(p.t).toLocaleDateString('en-PH', { month: 'short', day: 'numeric' });
+            return { key: String(p.t), label, tip: label, value: p.n };
+          })}
+          everyNth={6}
+        />
+      </Card>
+
+      {/* Reports */}
+      <Card className="xl:col-span-4" icon="list_alt" title="Reports" link={{ label: 'List of reports', onClick: () => onNavigate('maintenance') }}>
+        <div className="flex items-center gap-5">
+          <div className="grid grid-cols-2 gap-x-3 gap-y-4 flex-1 min-w-0">
+            <Mini dot="bg-tertiary" label="Open" value={v.open.length} />
+            <Mini dot="bg-primary-light" label="Fixed · 30d" value={v.fixed30.length} />
+            <Mini dot="bg-error" label="Unsafe" value={v.open.filter((o) => o.priority === 'P1').length} />
+            <Mini dot="bg-outline" label="Not called" value={v.open.filter((o) => o.status === 'Reported / Queued').length} />
+          </div>
+          <Donut
+            size={96}
+            parts={[
+              { value: v.fixed30.length, color: 'var(--color-primary-light)', label: 'Fixed' },
+              { value: v.open.length, color: 'var(--color-tertiary)', label: 'Open' },
+            ]}
+            center={String(v.open.length)}
+            caption="open"
           />
-          <Card icon="sos" tone="text-error" title={`${data.openAlerts} open alerts`} text="SOS and alarms">
-            <button onClick={() => onNavigate('security')} className="text-[10px] text-primary font-bold hover:underline mt-1 block">
-              Fleet & Security
-            </button>
-          </Card>
         </div>
-      </section>
+      </Card>
 
-      {/* Stats */}
-      <section className="bg-surface-container-lowest border border-outline-variant/60 rounded-2xl p-4 shadow-sm space-y-3">
-        <div className="flex items-center justify-between border-b border-surface-container pb-2">
-          <h2 className="text-xs font-bold text-on-surface uppercase tracking-wider">Fleet & Rider Statistics</h2>
-          <span className="text-[11px] text-on-surface-variant">Live</span>
-        </div>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-          <Tile label="Registered Riders" value={users} note={`${data.approved} verified`} />
-          <Tile label="Bicycles Available" value={available} tone="text-primary" note={`of ${bikes.length} total`} />
-          <Tile label="In Transit" value={inUse} tone="text-tertiary" note="Out now" />
-          <Tile label="Rides Today" value={data.ridesToday} note="Since midnight" />
-        </div>
-      </section>
-
-      {/* Hourly chart */}
-      <section className="bg-surface-container-lowest border border-outline-variant/60 rounded-2xl p-4 shadow-sm space-y-3">
-        <div>
-          <h3 className="text-sm font-bold text-on-surface">Rides by Hour (today)</h3>
-          <p className="text-[11px] text-on-surface-variant">6 AM to 6 PM, counted when the ride started</p>
-        </div>
-        <div className="h-36 flex items-end justify-between gap-1 pt-4 px-1 border-b border-surface-container">
-          {data.perHour.map((item) => (
-            <div key={item.hour} className="flex-1 flex flex-col items-center gap-1 group relative h-full justify-end">
-              <div className="absolute -top-7 opacity-0 group-hover:opacity-100 transition-opacity bg-on-surface text-surface text-[9px] font-bold px-1.5 py-0.5 rounded pointer-events-none whitespace-nowrap shadow-sm">
-                {item.count} rides
-              </div>
-              <div
-                style={{ height: `${Math.max(2, Math.round((item.count / peak) * 100))}%` }}
-                className={`w-full rounded-t-md ${item.count === peak && item.count > 0 ? 'bg-primary' : 'bg-surface-container-high group-hover:bg-primary-container'}`}
-              ></div>
-              <span className="text-[8px] sm:text-[9px] text-outline truncate">{hourLabel(item.hour).split(' ')[0]}</span>
-            </div>
-          ))}
-        </div>
-        <div className="grid grid-cols-2 gap-3 pt-1 text-xs">
-          <div className="flex items-center justify-between p-2 rounded-lg bg-surface-container-low">
-            <span className="text-on-surface-variant">Riders:</span>
-            <span className="font-bold text-on-surface">
-              {users ? Math.round((data.students / users) * 100) : 0}% Student • {users ? Math.round((data.faculty / users) * 100) : 0}% Faculty
-            </span>
+      {/* Riders */}
+      <Card className="xl:col-span-8" icon="group" title="Riders" link={{ label: 'Approvals', onClick: () => onNavigate('verifications') }}>
+        <p className="text-xs text-on-surface-variant -mt-2 mb-4">{riders.length} registered riders</p>
+        <div className="flex items-center gap-6">
+          <div className="flex-1 space-y-4">
+            <HBar label="Students" value={students} max={Math.max(students, faculty, 1)} color="bg-secondary" />
+            <HBar label="Faculty / staff" value={faculty} max={Math.max(students, faculty, 1)} color="bg-primary-light" />
           </div>
-          <div className="flex items-center justify-between p-2 rounded-lg bg-surface-container-low">
-            <span className="text-on-surface-variant">Fleet:</span>
-            <span className="font-bold text-primary">
-              {pct(available)}% Avail • {pct(inUse)}% In-Use • {pct(maint)}% Maint
-            </span>
+          <div className="rounded-2xl bg-surface-container p-3 text-center">
+            <Donut parts={[{ value: verified, color: 'var(--color-primary-light)', label: 'Verified' }, { value: riders.length - verified, color: 'var(--color-surface-container-highest)', label: 'Not yet' }]} center={`${riders.length ? Math.round((verified / riders.length) * 100) : 0}%`} caption="verified" size={92} />
           </div>
         </div>
-      </section>
+      </Card>
 
-      {/* Hubs */}
-      <section className="bg-surface-container-lowest border border-outline-variant/60 rounded-2xl p-4 shadow-sm space-y-3">
-        <div className="flex items-center justify-between border-b border-surface-container pb-2">
-          <h3 className="text-sm font-bold text-on-surface">Campus Hub Status</h3>
-          <span className="text-xs text-primary font-bold">{stations.length} Hubs</span>
-        </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-          {stations.map((s) => (
-            <div key={s.id} className="p-3 rounded-xl bg-surface-container-low border border-outline-variant/40 space-y-1.5">
-              <div className="flex items-center justify-between">
-                <h4 className="text-xs font-bold text-on-surface">{s.name}</h4>
-                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${s.status === 'optimal' ? 'bg-primary/10 text-primary' : 'bg-tertiary/10 text-tertiary'}`}>
-                  {s.status === 'optimal' ? 'Optimal' : s.statusMessage || (s.status === 'offline' ? 'Offline' : 'Warning')}
-                </span>
-              </div>
-              <div className="flex items-center justify-between text-xs text-on-surface-variant">
-                <span>Available: <strong className="text-primary">{s.availableBikes}</strong></span>
-                <span>Free Bays: <strong className="text-on-surface">{s.freeBays}</strong></span>
-                <span>Total: {s.totalBays}</span>
-              </div>
-              <div className="w-full h-1.5 bg-surface-container rounded-full overflow-hidden">
-                <div
-                  style={{ width: `${s.totalBays ? Math.round((s.availableBikes / s.totalBays) * 100) : 0}%` }}
-                  className="h-full bg-primary rounded-full"
-                ></div>
-              </div>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      <section className="grid grid-cols-3 gap-2">
-        {([
-          { label: 'Identity Approvals', icon: 'how_to_reg', screen: 'verifications' },
-          { label: 'Fleet & Security', icon: 'shield', screen: 'security' },
-          { label: 'Parts Inventory', icon: 'inventory_2', screen: 'depot_inventory' },
-        ] as const).map((btn) => (
-          <button
-            key={btn.label}
-            onClick={() => onNavigate(btn.screen)}
-            className="p-3 rounded-xl bg-surface-container-lowest border border-outline-variant/60 flex flex-col items-center gap-1 hover:bg-surface-container text-center shadow-xs"
-          >
-            <span className="material-symbols-outlined text-primary text-[20px]">{btn.icon}</span>
-            <span className="text-[10px] font-bold text-on-surface">{btn.label}</span>
-          </button>
-        ))}
-      </section>
-    </>
-  );
-}
-
-function Card({ icon, tone, title, text, children }: { icon: string; tone: string; title: string; text: string; children?: React.ReactNode }) {
-  return (
-    <div className="p-3 rounded-xl bg-surface-container-low border border-outline-variant/60 flex items-start gap-2.5">
-      <span className={`material-symbols-outlined ${tone} text-[20px] shrink-0 mt-0.5`}>{icon}</span>
-      <div className="flex-1">
-        <h4 className="text-xs font-bold text-on-surface">{title}</h4>
-        <p className="text-[11px] text-on-surface-variant">{text}</p>
-        {children}
-      </div>
+      {/* Fleet overview */}
+      <Card className="xl:col-span-4" icon="directions_bike" title="Fleet overview" link={{ label: 'Bike history', onClick: () => onNavigate('bike_history') }}>
+        <dl className="space-y-3.5 text-sm">
+          <Line icon="check_circle" tone="text-success" label="Available" value={ready} />
+          <Line icon="pedal_bike" tone="text-primary-light" label="In use" value={inUse} />
+          <Line icon="search" tone="text-tertiary" label="Under inspection" value={inspection} />
+          <Line icon="build" tone="text-error" label="Under maintenance" value={maintenance} />
+          <Line icon="battery_alert" tone="text-[#fb923c]" label={`Unavailable (battery ${LOW_BATTERY}% or lower)`} value={unavailable} />
+        </dl>
+      </Card>
     </div>
   );
 }
 
-function Tile({ label, value, note, tone = 'text-on-surface' }: { label: string; value: number; note: string; tone?: string }) {
+function Card({
+  className = '',
+  icon,
+  title,
+  badge,
+  link,
+  children,
+}: {
+  className?: string;
+  icon: string;
+  title: string;
+  badge?: string;
+  link?: { label: string; onClick: () => void };
+  children: React.ReactNode;
+}) {
   return (
-    <div className="bg-surface-container-low p-2.5 rounded-xl">
-      <span className="text-[11px] text-on-surface-variant block">{label}</span>
-      <span className={`text-2xl font-extrabold ${tone}`}>{value}</span>
-      <span className="text-[10px] text-on-surface-variant block mt-0.5">{note}</span>
+    <section className={`bg-surface-container-lowest border border-outline-variant/60 rounded-2xl p-5 flex flex-col ${className}`}>
+      <div className="flex items-center gap-2.5 mb-4">
+        <span className="w-8 h-8 rounded-lg bg-primary-light/15 text-primary-light flex items-center justify-center">
+          <span className="material-symbols-outlined text-[18px]">{icon}</span>
+        </span>
+        <h3 className="text-base font-semibold">{title}</h3>
+        {badge && <span className="ml-auto text-xs px-2.5 py-1 rounded-lg bg-surface-container text-on-surface-variant">{badge}</span>}
+      </div>
+      <div className="flex-1">{children}</div>
+      {link && (
+        <button onClick={link.onClick} className="mt-4 pt-3 border-t border-outline-variant/60 flex items-center gap-1 text-sm text-on-surface-variant hover:text-on-surface self-stretch">
+          {link.label}
+          <span className="material-symbols-outlined text-[18px] text-primary-light">arrow_forward</span>
+        </button>
+      )}
+    </section>
+  );
+}
+
+function Mini({ dot, label, value }: { dot: string; label: string; value: number }) {
+  return (
+    <div>
+      <p className="text-xs text-on-surface-variant flex items-center gap-1.5 whitespace-nowrap">
+        <span className={`w-2 h-2 rounded-full shrink-0 ${dot}`} />
+        {label}
+      </p>
+      <p className="text-lg font-semibold mt-0.5">{value}</p>
+    </div>
+  );
+}
+
+function Line({ icon, tone, label, value }: { icon: string; tone: string; label: string; value: number }) {
+  return (
+    <div className="flex items-center gap-2.5">
+      <span className={`material-symbols-outlined text-[18px] ${tone}`}>{icon}</span>
+      <dt className="text-on-surface-variant">{label}</dt>
+      <dd className="ml-auto font-semibold">{value}</dd>
+    </div>
+  );
+}
+
+function HBar({ label, value, max, color }: { label: string; value: number; max: number; color: string }) {
+  return (
+    <div className="grid grid-cols-[110px_1fr_40px] items-center gap-3 text-sm">
+      <span className="text-on-surface-variant">{label}</span>
+      <div className="h-3 rounded-full bg-surface-container overflow-hidden">
+        <div className={`h-full rounded-full ${color}`} style={{ width: `${(value / max) * 100}%` }} />
+      </div>
+      <span className="text-right font-semibold">{value}</span>
     </div>
   );
 }

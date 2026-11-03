@@ -7,12 +7,12 @@
  */
 import { decode } from 'base64-arraybuffer';
 import { supabase } from '../lib/supabase';
-import { UserProfile, VerificationStatus } from '../types';
+import { MemberType, UserProfile, VerificationStatus } from '../types';
 
 export type SignUpInput = {
   email: string;
   password: string;
-  role: 'student' | 'faculty';
+  memberType: MemberType;
   name: string;
   studentId: string;
   course?: string;
@@ -24,6 +24,7 @@ type ProfileRow = {
   id: string;
   name: string;
   role: UserProfile['role'];
+  member_type: MemberType | null;
   email: string;
   student_id: string | null;
   course: string | null;
@@ -41,6 +42,7 @@ const toProfile = (row: ProfileRow): UserProfile => ({
   id: row.id,
   name: row.name,
   role: row.role,
+  memberType: row.member_type ?? 'student',
   email: row.email,
   studentId: row.student_id ?? undefined,
   course: row.course ?? undefined,
@@ -101,7 +103,7 @@ export async function signUp(input: SignUpInput): Promise<UserProfile | null> {
     password: input.password,
     options: {
       data: {
-        role: input.role,
+        member_type: input.memberType,
         name: input.name.trim(),
         student_id: input.studentId.trim(),
         course: input.course?.trim(),
@@ -144,6 +146,18 @@ export async function submitVerification(userId: string): Promise<UserProfile> {
   const { error } = await supabase.rpc('submit_verification');
   if (error) throw new AuthError(error.message);
   return loadProfile(userId);
+}
+
+/** Base64 JPEGs of the identity requirements: students send all three, faculty/staff only their ID. */
+export type IdentityDocs = { id: string; cor?: string; selfie?: string };
+
+/** Uploads the requirement photos, then sends them for admin review. */
+export async function submitIdentity(userId: string, docs: IdentityDocs): Promise<UserProfile> {
+  for (const doc of ['id', 'cor', 'selfie'] as const) {
+    const photo = docs[doc];
+    if (photo) await uploadVerificationPhoto(userId, doc, photo);
+  }
+  return submitVerification(userId);
 }
 
 export async function signOut(): Promise<void> {

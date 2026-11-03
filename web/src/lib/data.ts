@@ -4,7 +4,7 @@
  */
 import { useCallback, useEffect, useState } from 'react';
 import { supabase } from './supabase';
-import { BicycleItem, InventoryItem, StationItem, WorkOrderItem } from '../types';
+import { BicycleItem, StationItem, WorkOrderItem } from '../types';
 
 const PRIORITY_LABEL = {
   P1: 'High Priority (P1)',
@@ -43,10 +43,13 @@ type WorkOrderRow = {
   reported_by: string;
   status: WorkOrderItem['status'];
   assigned_tech: string | null;
+  assigned_staff_id: string | null;
   parts_allocated: string | null;
   node_id: string | null;
   photo_url: string | null;
   created_at: string;
+  resolved_at: string | null;
+  resolution_notes: string | null;
 };
 
 export const toWorkOrder = (r: WorkOrderRow): WorkOrderItem => ({
@@ -61,10 +64,23 @@ export const toWorkOrder = (r: WorkOrderRow): WorkOrderItem => ({
   timestamp: formatTime(r.created_at),
   status: r.status,
   assignedTech: r.assigned_tech ?? undefined,
+  assignedStaffId: r.assigned_staff_id ?? undefined,
   partsAllocated: r.parts_allocated ?? undefined,
   nodeId: r.node_id ?? '',
   caliperPhotoUrl: r.photo_url ?? undefined,
+  createdAt: r.created_at,
+  resolvedAt: r.resolved_at ?? undefined,
+  resolutionNotes: r.resolution_notes ?? undefined,
 });
+
+/** Every report (open first, then newest), optionally for one bike. */
+export async function fetchWorkOrders(bikeId?: string): Promise<WorkOrderItem[]> {
+  let q = supabase.from('work_orders').select('*').order('created_at', { ascending: false }).limit(1000);
+  if (bikeId) q = q.eq('bike_id', bikeId);
+  const { data, error } = await q;
+  if (error) throw error;
+  return (data as WorkOrderRow[]).map(toWorkOrder);
+}
 
 /** Tickets that are not resolved yet, highest priority first. */
 export async function fetchOpenWorkOrders(): Promise<WorkOrderItem[]> {
@@ -78,7 +94,18 @@ export async function fetchOpenWorkOrders(): Promise<WorkOrderItem[]> {
   return (data as WorkOrderRow[]).map(toWorkOrder);
 }
 
-/* ---------- Bikes, hubs, parts ---------- */
+/* ---------- Bikes and hubs ---------- */
+
+/** A lock battery at or below this (%) makes a bike Unavailable — same rule as min_ride_battery() (migration 011). */
+export const LOW_BATTERY = 20;
+export const isLowBattery = (b: { battery: number }) => b.battery <= LOW_BATTERY;
+
+/** What a bike shows as: its database status, except an available bike with a low lock battery is "unavailable". */
+export type ShownStatus = BicycleItem['status'] | 'unavailable';
+export const shownStatus = (b: { status: BicycleItem['status']; battery: number }): ShownStatus =>
+  b.status === 'available' && isLowBattery(b) ? 'unavailable' : b.status;
+/** Can be borrowed right now. */
+export const isReady = (b: { status: BicycleItem['status']; battery: number }) => shownStatus(b) === 'available';
 
 type BikeRow = {
   id: string;
@@ -93,7 +120,8 @@ type BikeRow = {
 };
 
 export async function fetchBikes(): Promise<BicycleItem[]> {
-  const { data, error } = await supabase.from('bikes').select('*').order('id');
+  // Removed (retired) bikes stay in the database for their history but are not part of the fleet (migration 011)
+  const { data, error } = await supabase.from('bikes').select('*').is('retired_at', null).order('id');
   if (error) throw error;
   return (data as BikeRow[]).map((b) => ({
     id: b.id,
@@ -105,22 +133,6 @@ export async function fetchBikes(): Promise<BicycleItem[]> {
     status: b.status,
     imageUrl: b.image_url ?? '',
     nodeId: b.node_id,
-  }));
-}
-
-export async function fetchInventory(): Promise<InventoryItem[]> {
-  const { data, error } = await supabase.from('inventory').select('*').order('id');
-  if (error) throw error;
-  return data.map((r) => ({
-    id: r.id,
-    name: r.name,
-    description: r.description ?? '',
-    stock: r.stock,
-    unit: r.unit,
-    percentage: r.percentage,
-    statusTag: r.status_tag ?? '',
-    statusType: r.status_type,
-    reorderThreshold: r.reorder_threshold ?? undefined,
   }));
 }
 

@@ -8,6 +8,7 @@ export type ScreenType =
   | 'active_ride'
   | 'ride_history'
   | 'profile'
+  | 'campus_map'
   | 'security'
   | 'report_issue'
   | 'maintenance'
@@ -15,12 +16,16 @@ export type ScreenType =
   | 'admin_dashboard'
   | 'depot_inventory';
 
-export type UserRole = 'student' | 'faculty' | 'security' | 'maintenance' | 'admin';
+/** Two roles: riders ('user', this app) and 'admin' (web portal). */
+export type UserRole = 'user' | 'admin';
+export type MemberType = 'student' | 'faculty';
 
 export interface UserProfile {
   id: string;
   name: string;
   role: UserRole;
+  /** Riders only: student or faculty */
+  memberType: MemberType;
   title?: string;
   department?: string;
   studentId?: string;
@@ -44,7 +49,8 @@ export interface BicycleItem {
   rangeKm: number;
   station: string;
   bay: string;
-  status: 'available' | 'in_use' | 'maintenance' | 'locked';
+  /** inspection = an issue was reported, maintenance must check it first (migration 009) */
+  status: 'available' | 'in_use' | 'inspection' | 'maintenance' | 'locked';
   imageUrl: string;
   nodeId: string;
 }

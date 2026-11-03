@@ -4,9 +4,19 @@ import { BarcodeScanningResult, CameraView, useCameraPermissions } from 'expo-ca
 import { BicycleItem, ScreenType, UserProfile } from '../types';
 import { colors, radius } from '../theme';
 import { Icon } from '../components/Icon';
-import { Badge, Button, Card, Field, Header, Row, Screen, Sheet, T } from '../components/ui';
+import { Badge, Button, Card, Header, Row, Screen, T } from '../components/ui';
 import { parseBikeQr, unlockBike } from '../services/lockService';
-import { cancelRide, fetchBike, requestUnlockToken, startRide } from '../services/rideService';
+import {
+  cancelRide,
+  fetchBike,
+  isLowBattery,
+  LOW_BATTERY,
+  reportInspection,
+  requestUnlockToken,
+  startRide,
+  swapBike,
+} from '../services/rideService';
+import { InspectionResult, InspectionSheet } from '../components/InspectionSheet';
 
 type Props = {
   user: UserProfile;
@@ -17,6 +27,10 @@ type Props = {
   onStartRide: (bike: BicycleItem, ride: { rideId: string; startedAt: number }) => void;
   /** A bike's status may have changed on the server — reload the list. */
   onBikesChanged: () => void;
+  /** Set while swapping bikes mid-ride: the new bike replaces this ride's bike (swap_bike). */
+  swap?: { rideId: string; fromBikeId: string; reason: string } | null;
+  /** The swap went through on the server but the new lock did not open: the rider has no ride now. */
+  onSwapAborted?: () => void;
 };
 
 type AccessCheck = { title: string; ok: boolean; detail: string };
@@ -44,31 +58,39 @@ function accessChecks(user: UserProfile, bike: BicycleItem, hasActiveRide: boole
       ok: bike.status === 'available',
       detail: bike.status === 'available' ? 'Ready to unlock.' : `Status: ${bike.status.replace('_', ' ')}.`,
     },
+    {
+      title: 'Lock battery is charged',
+      ok: !isLowBattery(bike),
+      detail: !isLowBattery(bike)
+        ? `${bike.battery}% — enough for a full ride.`
+        : `${bike.battery}% — unavailable (bikes at ${LOW_BATTERY}% or lower can't be borrowed). Please choose another bike.`,
+    },
   ];
 }
 
-export function ScanScreen({ user, bikes, hasActiveRide, onNavigate, onStartRide, onBikesChanged }: Props) {
+export function ScanScreen({ user, bikes, hasActiveRide, onNavigate, onStartRide, onBikesChanged, swap, onSwapAborted }: Props) {
   const [permission, requestPermission] = useCameraPermissions();
   const [torch, setTorch] = useState(false);
   const [bike, setBike] = useState<BicycleItem | null>(null);
+  const [qrCode, setQrCode] = useState(''); // secret part of the scanned QR, checked by start_ride
   const [looking, setLooking] = useState(false);
   const [countdown, setCountdown] = useState(45);
   const [unlocking, setUnlocking] = useState(false);
   const [stage, setStage] = useState('');
-  const [manualOpen, setManualOpen] = useState(false);
-  const [manualCode, setManualCode] = useState('');
+  const [inspecting, setInspecting] = useState(false);
+  const [reporting, setReporting] = useState(false);
   const scanLock = useRef(false);
 
-  const checks = bike ? accessChecks(user, bike, hasActiveRide) : [];
+  const checks = bike ? accessChecks(user, bike, hasActiveRide && !swap) : [];
   const allOk = checks.length > 0 && checks.every((c) => c.ok);
 
-  // Reservation countdown once all checks pass
+  // Reservation countdown once all checks pass (paused while the rider inspects the bike)
   useEffect(() => {
-    if (!bike || !allOk) return;
+    if (!bike || !allOk || inspecting) return;
     setCountdown(45);
     const t = setInterval(() => setCountdown((c) => Math.max(0, c - 1)), 1000);
     return () => clearInterval(t);
-  }, [bike, allOk]);
+  }, [bike, allOk, inspecting]);
 
   useEffect(() => {
     if (bike && countdown === 0 && !unlocking) {
@@ -80,6 +102,7 @@ export function ScanScreen({ user, bikes, hasActiveRide, onNavigate, onStartRide
 
   const resetScan = () => {
     setBike(null);
+    setQrCode('');
     scanLock.current = false;
   };
 
@@ -105,8 +128,19 @@ export function ScanScreen({ user, bikes, hasActiveRide, onNavigate, onStartRide
       ]);
       return;
     }
+    if (swap && found.id === swap.fromBikeId) {
+      Alert.alert('Same bike', `Scan a different bike to swap ${found.id} for.`, [
+        { text: 'OK', onPress: () => (scanLock.current = false) },
+      ]);
+      return;
+    }
     if (found.status !== 'available') {
-      const why = found.status === 'maintenance' ? 'under maintenance' : found.status === 'in_use' ? 'already in use' : 'locked by admin';
+      const why = {
+        maintenance: 'under maintenance',
+        inspection: 'waiting for a maintenance check',
+        in_use: 'already in use',
+        locked: 'locked by admin',
+      }[found.status];
       Alert.alert('Not available', `${found.id} is ${why}. Please choose another bike.`, [
         { text: 'OK', onPress: () => (scanLock.current = false) },
       ]);
@@ -118,23 +152,51 @@ export function ScanScreen({ user, bikes, hasActiveRide, onNavigate, onStartRide
   const onScanned = (result: BarcodeScanningResult) => {
     if (scanLock.current || bike || looking) return;
     scanLock.current = true;
-    selectBikeById(parseBikeQr(result.data), result.data);
+    const qr = parseBikeQr(result.data);
+    if (qr && !qr.code) {
+      Alert.alert('Old QR code', `This QR code on ${qr.bikeId} no longer works. Please tell an admin so they can print a new one.`, [
+        { text: 'OK', onPress: () => (scanLock.current = false) },
+      ]);
+      return;
+    }
+    setQrCode(qr?.code ?? '');
+    selectBikeById(qr?.bikeId ?? null, result.data);
   };
 
-  const onManualConfirm = () => {
-    setManualOpen(false);
-    selectBikeById(parseBikeQr(manualCode), manualCode);
+  /** Checklist done: unlock (reporting any problems once riding), or report and pick another bike. */
+  const onInspected = async (result: InspectionResult, ride: boolean) => {
+    if (!bike) return;
+    if (ride) {
+      // Start the ride before reporting: a report on an available bike puts it under inspection
+      setInspecting(false);
+      onUnlock(result.problems.length > 0 ? result : undefined);
+      return;
+    }
+    setReporting(true);
+    try {
+      const ticket = await reportInspection(user, bike, 'borrow', result, false);
+      Alert.alert('Report sent', `Ticket ${ticket.id} was sent to maintenance, and ${bike.id} will be checked. Please choose another bike.`);
+    } catch (e) {
+      Alert.alert('Report not sent', `${(e as Error).message}\nCheck your internet connection and try again.`);
+      return;
+    } finally {
+      setReporting(false);
+    }
+    setInspecting(false);
+    onBikesChanged();
+    resetScan();
   };
 
-  // Server first: start_ride checks approval/availability and reserves the bike, then a signed
-  // token for that ride is sent to the lock. If the lock does not open, the ride is cancelled.
-  const onUnlock = async () => {
+  // Server first: start_ride checks the QR code, approval and availability and reserves the bike, then
+  // a signed token for that ride is sent to the lock. If the lock does not open, the ride is cancelled.
+  // `problems` (rider chose "ride anyway") are reported once the ride has started.
+  const onUnlock = async (problems?: InspectionResult) => {
     if (!bike || !allOk) return;
     setUnlocking(true);
     let ride: { rideId: string; startedAt: number } | undefined;
     try {
-      setStage('Reserving bike...');
-      ride = await startRide(bike.id);
+      setStage(swap ? 'Swapping bikes...' : 'Reserving bike...');
+      ride = swap ? await swapBike(swap.rideId, bike.id, qrCode, swap.reason) : await startRide(bike.id, qrCode);
       setStage('Getting unlock key...');
       const token = await requestUnlockToken(ride.rideId);
       setStage('Opening smart lock...');
@@ -142,8 +204,15 @@ export function ScanScreen({ user, bikes, hasActiveRide, onNavigate, onStartRide
       if (!res.ok) throw new Error(res.reason);
       onStartRide(bike, ride!);
       onNavigate('active_ride');
+      if (problems) {
+        reportInspection(user, bike, 'borrow', problems, true)
+          .then((t) => Alert.alert('Report sent', `Ticket ${t.id} was sent to maintenance. Ride safely!`))
+          .catch((e) =>
+            Alert.alert('Report not sent', `${(e as Error).message}\nYou can send it from Report Issue after your ride.`),
+          );
+      }
     } catch (e) {
-      let note = '';
+      let note = ride && swap ? `\nYour ride on ${swap.fromBikeId} has ended and it was reported. Scan any bike to ride again.` : '';
       if (ride) {
         const rideId = ride.rideId;
         await cancelRide(rideId).catch(() => {
@@ -151,6 +220,7 @@ export function ScanScreen({ user, bikes, hasActiveRide, onNavigate, onStartRide
         });
       }
       Alert.alert('Unlock failed', (e as Error).message + note);
+      if (ride && swap) onSwapAborted?.(); // the old ride is over on the server
       onBikesChanged();
       resetScan();
     } finally {
@@ -160,18 +230,15 @@ export function ScanScreen({ user, bikes, hasActiveRide, onNavigate, onStartRide
 
   const header = (
     <Header
-      title="Scan & Unlock"
-      subtitle="PedalPass DYCI Smart Lock"
-      onBack={() => onNavigate('home')}
+      title={swap ? 'Swap Bike' : 'Scan & Unlock'}
+      subtitle={swap ? `Scan the bike that replaces ${swap.fromBikeId}` : 'PedalPass DYCI Smart Lock'}
+      onBack={() => onNavigate(swap ? 'active_ride' : 'home')}
       right={
-        <Row gap={6}>
-          {!bike && permission?.granted && (
-            <Pressable onPress={() => setTorch(!torch)} style={styles.roundBtn} accessibilityLabel="Toggle flashlight">
-              <Icon name={torch ? 'flash_on' : 'flash_off'} size={20} color={colors.onSurface} />
-            </Pressable>
-          )}
-          <Button label="Enter Code" small variant="outline" onPress={() => setManualOpen(true)} />
-        </Row>
+        !bike && permission?.granted ? (
+          <Pressable onPress={() => setTorch(!torch)} style={styles.roundBtn} accessibilityLabel="Toggle flashlight">
+            <Icon name={torch ? 'flash_on' : 'flash_off'} size={20} color={colors.onSurface} />
+          </Pressable>
+        ) : undefined
       }
     />
   );
@@ -222,9 +289,9 @@ export function ScanScreen({ user, bikes, hasActiveRide, onNavigate, onStartRide
               <Icon name="info" size={20} color={colors.primary} />
               <T variant="h3">How to unlock</T>
             </Row>
-            <T variant="small">1. Scan the QR code on the smart lock (or tap "Enter Code").</T>
+            <T variant="small">1. Scan the QR code on the smart lock.</T>
             <T variant="small">2. PedalPass checks your account and the bike.</T>
-            <T variant="small">3. Tap "Unlock Bicycle Now" while standing next to the bike.</T>
+            <T variant="small">3. Tap "Unlock Bicycle Now", check the brakes, tires and chain, then unlock.</T>
           </Card>
 
           {looking && <ActivityIndicator color={colors.primary} />}
@@ -312,28 +379,22 @@ export function ScanScreen({ user, bikes, hasActiveRide, onNavigate, onStartRide
             icon="key"
             loading={unlocking}
             disabled={!allOk}
-            onPress={onUnlock}
+            onPress={() => setInspecting(true)}
           />
           <Button label="Cancel & Scan Another Bike" variant="outline" onPress={resetScan} />
         </>
       )}
 
-      <Sheet visible={manualOpen} onClose={() => setManualOpen(false)}>
-        <T variant="h3">Enter Bicycle Code</T>
-        <T variant="tiny">The code is printed on the lock plate (e.g. BP-001, BP-012).</T>
-        <Field
-          value={manualCode}
-          onChangeText={(v) => setManualCode(v.toUpperCase())}
-          placeholder="BP-001"
-          icon="pedal_bike"
-          autoCapitalize="characters"
+      {bike && (
+        <InspectionSheet
+          visible={inspecting}
+          mode="borrow"
+          bikeId={bike.id}
+          busy={reporting}
+          onClose={() => setInspecting(false)}
+          onDone={onInspected}
         />
-        <Row gap={8}>
-          <Button label="Cancel" variant="outline" style={{ flex: 1 }} onPress={() => setManualOpen(false)} />
-          <Button label="Confirm" style={{ flex: 1 }} onPress={onManualConfirm} />
-        </Row>
-      </Sheet>
-    </Screen>
+      )}    </Screen>
   );
 }
 
@@ -350,7 +411,7 @@ const styles = StyleSheet.create({
     height: 340,
     borderRadius: radius.lg,
     overflow: 'hidden',
-    backgroundColor: '#0b1c30',
+    backgroundColor: '#000000',
     alignItems: 'center',
     justifyContent: 'center',
   },

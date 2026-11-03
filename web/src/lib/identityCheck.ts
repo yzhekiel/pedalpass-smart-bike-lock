@@ -17,9 +17,10 @@ export type CheckResult = {
 };
 
 // Human's guidance: similarity above 0.5 can be considered the same person.
-// ID photos are small and often old, so 0.5–0.6 is shown as "possible" for staff to look at closely.
-const STRONG = 0.6;
-const POSSIBLE = 0.5;
+// ID photos are small and often old, so PedalPass passes 46% and up (same as the mobile app); 40–45% is
+// shown as "possible" for admins to look at closely.
+const STRONG = 0.46;
+const POSSIBLE = 0.4;
 
 let human: Human | null = null;
 let ocr: Promise<Worker> | null = null;
@@ -147,9 +148,9 @@ export async function checkIdentity(
   const faceVerdict =
     faceSimilarity === null
       ? 'no_face'
-      : faceSimilarity >= STRONG
+      : Math.round(faceSimilarity * 100) >= Math.round(STRONG * 100)
         ? 'strong'
-        : faceSimilarity >= POSSIBLE
+        : Math.round(faceSimilarity * 100) >= Math.round(POSSIBLE * 100)
           ? 'possible'
           : 'no_match';
 

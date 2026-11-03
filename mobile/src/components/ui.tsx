@@ -133,7 +133,7 @@ export function SectionTitle({ children, icon, right }: { children: ReactNode; i
 
 /* ---------- Buttons ---------- */
 
-type BtnVariant = 'primary' | 'outline' | 'ghost' | 'danger' | 'light';
+type BtnVariant = 'primary' | 'accent' | 'outline' | 'ghost' | 'danger' | 'light';
 
 export function Button({
   label,
@@ -182,18 +182,20 @@ export function Button({
 }
 
 const btnVariants: Record<BtnVariant, { bg: string; fg: string; border: string }> = {
-  primary: { bg: colors.primary, fg: colors.onPrimary, border: colors.primary },
-  outline: { bg: colors.surfaceContainerLowest, fg: colors.onSurface, border: colors.outlineVariant },
+  primary: { bg: colors.primaryFill, fg: colors.onPrimary, border: colors.primaryFill },
+  /** Gold call to action (Scan / Unlock) */
+  accent: { bg: colors.gold, fg: colors.onGold, border: colors.gold },
+  outline: { bg: colors.surfaceContainerLowest, fg: colors.onSurface, border: colors.surfaceContainerHigh },
   ghost: { bg: 'transparent', fg: colors.primary, border: 'transparent' },
   danger: { bg: colors.error, fg: '#fff', border: colors.error },
-  light: { bg: '#fff', fg: colors.primary, border: '#fff' },
+  light: { bg: '#fff', fg: colors.primaryFill, border: '#fff' },
 };
 
 export function IconButton({
   icon,
   onPress,
-  bg = 'transparent',
-  color = colors.onSurfaceVariant,
+  bg = colors.surfaceContainerLowest,
+  color = colors.onSurface,
   dot,
   label,
 }: {
@@ -205,7 +207,7 @@ export function IconButton({
   label?: string;
 }) {
   return (
-    <Pressable onPress={onPress} style={[styles.iconBtn, { backgroundColor: bg }]} accessibilityLabel={label}>
+    <Pressable onPress={onPress} style={[styles.iconBtn, bg !== 'transparent' && shadow, { backgroundColor: bg }]} accessibilityLabel={label}>
       <Icon name={icon} size={22} color={color} />
       {dot && <View style={styles.dot} />}
     </Pressable>
@@ -238,7 +240,7 @@ export function Chip({
   selected,
   onPress,
   icon,
-  activeColor = colors.primary,
+  activeColor = colors.primaryFill,
 }: {
   label: string;
   selected?: boolean;
@@ -254,8 +256,8 @@ export function Chip({
         selected && { backgroundColor: activeColor, borderColor: activeColor },
       ]}
     >
-      {icon && <Icon name={icon} size={16} color={selected ? '#fff' : colors.onSurfaceVariant} />}
-      <Text style={[styles.chipText, selected && { color: '#fff' }]}>{label}</Text>
+      {icon && <Icon name={icon} size={16} color={selected ? (activeColor === colors.gold ? colors.onGold : '#fff') : colors.onSurfaceVariant} />}
+      <Text style={[styles.chipText, selected && { color: activeColor === colors.gold ? colors.onGold : '#fff' }]}>{label}</Text>
     </Pressable>
   );
 }
@@ -295,7 +297,7 @@ export function Field({
       <View
         style={[
           styles.inputWrap,
-          multiline && { alignItems: 'flex-start' },
+          multiline && { alignItems: 'flex-start', borderRadius: radius.md },
           highlight && { backgroundColor: colors.successContainer, borderColor: colors.success },
         ]}
       >
@@ -320,6 +322,25 @@ export function Field({
       </View>
       {hint}
     </View>
+  );
+}
+
+/* ---------- Icon tile ---------- */
+
+/** Square white tile with an icon over a short label — the quick actions row on Home. */
+export function Tile({ icon, label, onPress, highlight }: { icon: string; label: string; onPress?: () => void; highlight?: boolean }) {
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      style={({ pressed }) => [styles.iconTile, highlight && { backgroundColor: colors.gold }, pressed && { transform: [{ scale: 0.97 }] }]}
+    >
+      <Icon name={icon} size={26} color={highlight ? colors.onGold : colors.onSurface} />
+      <Text style={[styles.iconTileText, highlight && { color: colors.onGold }]} numberOfLines={1}>
+        {label}
+      </Text>
+    </Pressable>
   );
 }
 
@@ -398,9 +419,9 @@ export function KeyValue({ k, v, vStyle }: { k: string; v: ReactNode; vStyle?: S
 /* ---------- Styles ---------- */
 
 const text = StyleSheet.create({
-  h1: { fontSize: 26, fontWeight: '800', color: colors.onSurface, letterSpacing: -0.3 },
-  h2: { fontSize: 19, fontWeight: '800', color: colors.onSurface },
-  h3: { fontSize: 14, fontWeight: '700', color: colors.onSurface },
+  h1: { fontSize: 28, fontWeight: '800', color: colors.onSurface, letterSpacing: -0.4 },
+  h2: { fontSize: 20, fontWeight: '800', color: colors.onSurface, letterSpacing: -0.2 },
+  h3: { fontSize: 15, fontWeight: '700', color: colors.onSurface },
   body: { fontSize: 13, color: colors.onSurface, lineHeight: 19 },
   small: { fontSize: 12, color: colors.onSurface, lineHeight: 17 },
   tiny: { fontSize: 11, color: colors.onSurfaceVariant, lineHeight: 15 },
@@ -413,41 +434,38 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: 6,
     backgroundColor: colors.surface,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.surfaceContainer,
     gap: 8,
   },
-  headerTitle: { fontSize: 16, fontWeight: '800', color: colors.onSurface },
+  headerTitle: { fontSize: 20, fontWeight: '800', color: colors.onSurface, letterSpacing: -0.2 },
   headerSub: { fontSize: 11, color: colors.onSurfaceVariant },
   row: { flexDirection: 'row', alignItems: 'center' },
   card: {
     backgroundColor: colors.surfaceContainerLowest,
     borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: 'rgba(189,203,226,0.6)',
-    padding: 14,
+    padding: 16,
     ...shadow,
   },
-  tile: { flex: 1, minWidth: '46%', padding: 12, borderRadius: radius.md },
+  tile: { flex: 1, minWidth: '46%', padding: 14, borderRadius: radius.lg },
   btn: {
-    minHeight: 50,
-    borderRadius: radius.md,
+    minHeight: 52,
+    borderRadius: radius.full,
     borderWidth: 1.5,
-    paddingHorizontal: 16,
+    paddingHorizontal: 20,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
   },
-  btnSmall: { minHeight: 34, paddingHorizontal: 10, borderRadius: radius.sm },
+  btnSmall: { minHeight: 36, paddingHorizontal: 14, borderRadius: radius.full },
   btnText: { fontSize: 14, fontWeight: '800' },
   iconBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -476,12 +494,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: radius.md,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    borderRadius: radius.full,
     borderWidth: 1,
-    borderColor: colors.outlineVariant,
-    backgroundColor: colors.surfaceContainerLowest,
+    borderColor: colors.surfaceContainer,
+    backgroundColor: colors.surfaceContainer,
   },
   chipText: { fontSize: 12, fontWeight: '700', color: colors.onSurface },
   inputWrap: {
@@ -489,12 +507,23 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
     borderWidth: 1,
-    borderColor: colors.outlineVariant,
-    borderRadius: radius.md,
-    backgroundColor: colors.surface,
-    paddingHorizontal: 12,
+    borderColor: colors.surfaceContainer,
+    borderRadius: radius.full,
+    backgroundColor: colors.surfaceContainer,
+    paddingHorizontal: 16,
   },
-  input: { flex: 1, paddingVertical: 12, fontSize: 14, color: colors.onSurface },
+  input: { flex: 1, paddingVertical: 14, fontSize: 14, color: colors.onSurface },
+  iconTile: {
+    width: 84,
+    height: 84,
+    borderRadius: radius.lg,
+    backgroundColor: colors.surfaceContainerLowest,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    ...shadow,
+  },
+  iconTileText: { fontSize: 12, fontWeight: '700', color: colors.onSurface },
   scrim: {
     flex: 1,
     backgroundColor: colors.scrim,
@@ -507,7 +536,8 @@ const styles = StyleSheet.create({
     maxWidth: 380,
     backgroundColor: colors.surfaceContainerLowest,
     borderRadius: radius.xl,
-    padding: 20,
+    padding: 22,
     gap: 12,
+    ...shadow,
   },
 });

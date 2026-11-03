@@ -48,7 +48,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
           <PedalPassLogo size={56} />
           <div>
             <p className="text-xl font-extrabold">PedalPass</p>
-            <p className="text-xs text-on-primary-container">Staff Monitoring Portal</p>
+            <p className="text-xs text-on-primary-container">Admin Portal</p>
           </div>
         </div>
         <div className="space-y-4 max-w-md">
@@ -59,7 +59,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
             {[
               ['monitoring', 'Live fleet status and active rides'],
               ['notifications_active', 'Tamper, low-battery and late-return alerts'],
-              ['build', 'Maintenance work orders and parts inventory'],
+              ['build', 'Issue reports and the bike maintenance list'],
               ['assessment', 'Usage reports for administrators'],
             ].map(([icon, text]) => (
               <li key={text} className="flex items-center gap-2">
@@ -79,14 +79,14 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
             <div className="inline-flex mb-2">
               <PedalPassLogo size={80} />
             </div>
-            <h1 className="text-2xl font-extrabold text-primary">PedalPass</h1>
-            <p className="text-sm text-on-surface-variant">Staff Monitoring Portal</p>
+            <h1 className="text-2xl font-extrabold text-primary-light">PedalPass</h1>
+            <p className="text-sm text-on-surface-variant">Admin Portal</p>
           </div>
 
           <div className="bg-surface-container-lowest rounded-2xl p-6 border border-outline-variant/50 shadow-sm">
-            <h2 className="text-lg font-extrabold text-on-surface">Staff Sign In</h2>
+            <h2 className="text-lg font-extrabold text-on-surface">Admin Sign In</h2>
             <p className="text-xs text-on-surface-variant mb-4">
-              Your role (security, maintenance or administrator) comes from your account. For campus staff only. Students use the PedalPass mobile app.
+              For PedalPass admins only. Students and faculty use the PedalPass mobile app.
             </p>
 
             <form className="space-y-4" onSubmit={handleSignIn}>
@@ -102,7 +102,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
                     id="identifier"
                     value={identifier}
                     onChange={(e) => setIdentifier(e.target.value)}
-                    className="block w-full pl-10 pr-3 py-3 bg-surface text-on-surface text-sm rounded-xl border border-outline-variant focus:outline-none focus:ring-2 focus:ring-primary"
+                    className="block w-full pl-10 pr-3 py-3 bg-surface text-on-surface text-sm rounded-xl border border-outline-variant focus:outline-none focus:ring-2 focus:ring-primary-light"
                     type="email"
                     autoComplete="username"
                   />
@@ -121,7 +121,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
                     id="password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    className="block w-full pl-10 pr-10 py-3 bg-surface text-on-surface text-sm rounded-xl border border-outline-variant focus:outline-none focus:ring-2 focus:ring-primary"
+                    className="block w-full pl-10 pr-10 py-3 bg-surface text-on-surface text-sm rounded-xl border border-outline-variant focus:outline-none focus:ring-2 focus:ring-primary-light"
                     type={showPassword ? 'text' : 'password'}
                     autoComplete="current-password"
                   />

@@ -23,7 +23,7 @@ const STATUS: Record<NonNullable<UserProfile['verificationStatus']>, { label: st
 /** The signed-in rider's own account, straight from their profile in the database. */
 export function ProfileScreen({ user, rides, hasActiveRide, onNavigate, onLogout }: Props) {
   const status = STATUS[user.verificationStatus ?? 'approved'];
-  const isStudent = user.role === 'student';
+  const isStudent = user.memberType === 'student';
   const totalKm = Math.round(rides.reduce((sum, r) => sum + r.distanceKm, 0) * 10) / 10;
 
   return (
@@ -47,7 +47,7 @@ export function ProfileScreen({ user, rides, hasActiveRide, onNavigate, onLogout
 
       <Card style={{ gap: 10 }}>
         <SectionTitle icon="assignment_ind">{isStudent ? 'Student Information' : 'Staff Information'}</SectionTitle>
-        <KeyValue k="Role" v={isStudent ? 'Student' : 'Faculty / Staff'} />
+        <KeyValue k="Account" v={isStudent ? 'User • Student' : 'User • Faculty'} />
         {user.studentId ? <KeyValue k={isStudent ? 'Student No.' : 'School ID'} v={user.studentId} /> : null}
         {user.course ? <KeyValue k="Course" v={user.course} /> : null}
         {user.yearLevel ? <KeyValue k="Year Level" v={user.yearLevel} /> : null}

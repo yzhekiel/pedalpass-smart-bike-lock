@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
-import { Alert, Image, Pressable, StyleSheet, View } from 'react-native';
-import * as ImagePicker from 'expo-image-picker';
+import { Alert, Pressable, View } from 'react-native';
 import { UserProfile } from '../types';
-import { colors, radius } from '../theme';
+import { colors } from '../theme';
 import { Icon } from '../components/Icon';
-import { Button, Card, Header, Row, Screen, T } from '../components/ui';
-import { loadProfile, submitVerification, uploadVerificationPhoto, VerificationDoc } from '../services/authService';
+import { Button, Card, Header, Screen, T } from '../components/ui';
+import { loadProfile, submitIdentity, VerificationDoc } from '../services/authService';
+import { FaceCheckCard, Photo, PhotoCard, useFaceCheck } from '../components/IdentityPhotos';
 
 type Props = {
   profile: UserProfile;
@@ -19,38 +19,26 @@ const DOCS: { id: VerificationDoc; title: string; hint: string; icon: string }[]
   { id: 'selfie', title: 'Selfie', hint: 'Your face, well lit, no mask or sunglasses', icon: 'face' },
 ];
 
-const PICKER_OPTIONS: ImagePicker.ImagePickerOptions = { mediaTypes: ['images'], quality: 0.5, base64: true };
-
 export function VerifyIdentityScreen({ profile, onProfileChange, onLogout }: Props) {
-  const [photos, setPhotos] = useState<Partial<Record<VerificationDoc, { uri: string; base64: string }>>>({});
+  const [photos, setPhotos] = useState<Partial<Record<VerificationDoc, Photo>>>({});
   const [consent, setConsent] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const face = useFaceCheck(photos.id, photos.selfie);
 
   const status = profile.verificationStatus;
-
-  const take = async (doc: VerificationDoc, fromLibrary = false) => {
-    const permission = fromLibrary
-      ? await ImagePicker.requestMediaLibraryPermissionsAsync()
-      : await ImagePicker.requestCameraPermissionsAsync();
-    if (!permission.granted) {
-      Alert.alert('Permission needed', fromLibrary ? 'Allow photo access to choose a picture.' : 'Allow camera access to take the photo.');
-      return;
-    }
-    const result = fromLibrary
-      ? await ImagePicker.launchImageLibraryAsync(PICKER_OPTIONS)
-      : await ImagePicker.launchCameraAsync({
-          ...PICKER_OPTIONS,
-          cameraType: doc === 'selfie' ? ImagePicker.CameraType.front : ImagePicker.CameraType.back,
-        });
-    const asset = result.canceled ? null : result.assets[0];
-    if (asset?.base64) setPhotos((prev) => ({ ...prev, [doc]: { uri: asset.uri, base64: asset.base64! } }));
-  };
+  // Faculty/staff only submit their ID; students submit ID, COR and selfie
+  const isStudent = profile.memberType !== 'faculty';
+  const docs = isStudent ? DOCS : [{ ...DOCS[0], title: 'Faculty / Staff ID', hint: 'Front of your DYCI faculty or staff ID' }];
 
   const submit = async () => {
-    const missing = DOCS.filter((d) => !photos[d.id]);
+    const missing = docs.filter((d) => !photos[d.id]);
     if (missing.length) {
       Alert.alert('Photos missing', `Add: ${missing.map((d) => d.title).join(', ')}`);
+      return;
+    }
+    if (isStudent && !face.green) {
+      Alert.alert('Face match too low', 'Your selfie must strongly match your ID photo (green). Retake the photos and try again.');
       return;
     }
     if (!consent) {
@@ -59,8 +47,14 @@ export function VerifyIdentityScreen({ profile, onProfileChange, onLogout }: Pro
     }
     setSubmitting(true);
     try {
-      for (const d of DOCS) await uploadVerificationPhoto(profile.id, d.id, photos[d.id]!.base64);
-      onProfileChange(await submitVerification(profile.id));
+      onProfileChange(
+        await submitIdentity(
+          profile.id,
+          isStudent
+            ? { id: photos.id!.base64, cor: photos.cor!.base64, selfie: photos.selfie!.base64 }
+            : { id: photos.id!.base64 },
+        ),
+      );
     } catch (e) {
       Alert.alert('Upload failed', (e as Error).message);
     } finally {
@@ -115,40 +109,27 @@ export function VerifyIdentityScreen({ profile, onProfileChange, onLogout }: Pro
           <View style={{ flex: 1 }}>
             <T variant="h3">Verify you're a DYCI student or faculty</T>
             <T variant="tiny">
-              Add 3 photos. Campus staff compare your selfie with your school ID, then approve your bike pass.
+              {isStudent
+                ? 'Add 3 photos. A PedalPass admin compares your selfie with your school ID, then approves your bike pass.'
+                : 'Add a photo of your faculty / staff ID. A PedalPass admin checks it, then approves your bike pass.'}
             </T>
           </View>
         </Card>
       )}
 
-      {DOCS.map((d) => {
-        const photo = photos[d.id];
-        return (
-          <Card key={d.id} style={{ gap: 10 }}>
-            <Row gap={8}>
-              <Icon name={photo ? 'check_circle' : d.icon} size={22} color={photo ? colors.success : colors.primary} />
-              <View style={{ flex: 1 }}>
-                <T variant="h3">{d.title}</T>
-                <T variant="tiny">{d.hint}</T>
-              </View>
-            </Row>
-            {photo && <Image source={{ uri: photo.uri }} style={styles.preview} resizeMode="cover" />}
-            <Row gap={8}>
-              <Button
-                small
-                style={{ flex: 1 }}
-                icon="photo_camera"
-                label={photo ? 'Retake' : 'Take photo'}
-                variant={photo ? 'outline' : 'primary'}
-                onPress={() => take(d.id)}
-              />
-              {d.id !== 'selfie' && (
-                <Button small style={{ flex: 1 }} icon="image" label="Choose" variant="outline" onPress={() => take(d.id, true)} />
-              )}
-            </Row>
-          </Card>
-        );
-      })}
+      {face.element}
+      {docs.map((d) => (
+        <PhotoCard
+          key={d.id}
+          title={d.title}
+          hint={d.hint}
+          icon={d.icon}
+          photo={photos[d.id]}
+          selfie={d.id === 'selfie'}
+          onChange={(p) => setPhotos((prev) => ({ ...prev, [d.id]: p }))}
+        />
+      ))}
+      {isStudent && <FaceCheckCard check={face.check} onRetry={face.retry} />}
 
       <Pressable onPress={() => setConsent(!consent)}>
         <Card style={{ flexDirection: 'row', gap: 10 }}>
@@ -161,7 +142,8 @@ export function VerifyIdentityScreen({ profile, onProfileChange, onLogout }: Pro
             I agree that PedalPass may collect my school ID, COR and selfie only to verify my identity, under the Data
             Privacy Act of 2012 (RA 10173). Campus staff compare my selfie with my ID photo with the help of an
             automatic face-matching check that runs on PedalPass's own system. Only authorized campus staff can view
-            the photos, and they are deleted after review.
+            the photos. My selfie and COR are deleted after review; my ID photo is kept while I have a PedalPass
+            account so admins can identify who rode a bike.
           </T>
         </Card>
       </Pressable>
@@ -177,6 +159,3 @@ export function VerifyIdentityScreen({ profile, onProfileChange, onLogout }: Pro
   );
 }
 
-const styles = StyleSheet.create({
-  preview: { width: '100%', height: 180, borderRadius: radius.md, backgroundColor: colors.surfaceContainer },
-});

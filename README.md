@@ -5,7 +5,7 @@ This folder has two apps that work together:
 | Folder | Who uses it | Built with | How to open |
 |---|---|---|---|
 | `mobile/` | **Students & faculty**: scan QR, unlock bike, ride, return, history, report issue | Expo (React Native), SDK 58 | **Expo Go** on your phone |
-| `web/` | **Staff**: security, maintenance, admin monitoring | React + Vite + Tailwind | Browser (Chrome) |
+| `web/` | **Admins**: identity approvals, fleet, SOS alerts, repairs, parts | React + Vite + Tailwind | Browser (Chrome) |
 | `test-qr-codes/` | Printable or on-screen QR codes for testing the scanner | — | Open the PNG and scan it with the app |
 
 Both apps run on a **Supabase** database (live data, no sample data in the code). Set it up first: see "Next steps" below.
@@ -52,8 +52,8 @@ npm install
 npm run dev
 ```
 
-Open **http://localhost:3000**. Pick a role (Security / Maintenance / Administrator) and sign in
-with any password (the email must end with `@dyci.edu.ph`).
+Open **http://localhost:3000** and sign in with an **admin** account
+(see "Admin accounts" below).
 
 Build for hosting: `npm run build` → upload the `web/dist` folder (Firebase Hosting, Netlify, Vercel).
 
@@ -68,13 +68,13 @@ Build for hosting: `npm run build` → upload the `web/dist` folder (Firebase Ho
       the security rules, and the sample bikes/tickets/parts.
       Then run `supabase/migrations/002_identity_verification.sql` the same way. It allows any email to sign up
       and adds the identity check: riders upload their school ID, COR and a selfie (private storage), and
-      admin/security approve them on the web portal's **Identity Approvals** page. Only approved riders can ride.
+      admins approve them on the web portal's **Identity Approvals** page. Only approved riders can ride.
       That page runs a free, open-source AI check in the staff's browser to help them decide:
       face match between the ID photo and the selfie (Human, models in `web/public/models`) and the
       student number read from the ID/COR (Tesseract.js). Staff still make the final decision.
       Then run `supabase/migrations/003_unlock_tokens.sql`. It gives each smart lock its own secret key and
       lets the app get a signed 60-second unlock token for the rider's ride (the ESP32 checks it).
-      Then run `supabase/migrations/004_privacy_and_reports.sql`. Only admin and security can then see riders'
+      Then run `supabase/migrations/004_privacy_and_reports.sql`. Only admins can then see riders'
       profiles and ID photos, riders can't swap photos while they are being reviewed, and the database fills in
       the details of issue reports itself (a rider's "Unsafe to ride" report only blocks a bike they rode in the last hour).
    - **Scan COR** (sign-up screen): students photograph their COR and the form fills itself in (free OCR.space text reading
@@ -101,8 +101,20 @@ Build for hosting: `npm run build` → upload the `web/dist` folder (Firebase Ho
          and **Email OTP Length** is 6.
       - First emails may land in the **Spam / Junk** folder — mark them "Not spam".
       - Quick testing without email: turn **Confirm email** off; accounts work right after sign-up.
-   5. Staff accounts (web portal): create them in Authentication → Users → **Add user** (tick "Auto confirm"),
-      then set their role in the SQL Editor (examples at the bottom of `schema.sql`).
+   5. **Roles: User and Admin.** Run `supabase/migrations/005`, `006` and `007_user_and_admin_roles.sql` too.
+      Students and faculty sign up in the app as **users**. Admin accounts (web portal): create them in
+      Authentication → Users → **Add user** (tick "Auto confirm"),
+      then in the SQL Editor run: `update profiles set role = 'admin', verification_status = 'approved', is_verified = true where email = '...';`
+   6. **Automation and history.** Run `supabase/migrations/009_under_inspection_status.sql`, then
+      `010_automation_and_history.sql` (in that order, as two separate runs). Bike statuses then update themselves
+      (an issue report puts a bike **Under Inspection**, resolving its last ticket makes it available again), bikes
+      under 20% lock battery can't be borrowed, and every ride, report, repair, swap and part used goes into the activity log.
+      **QR codes change:** each bike's QR now carries a secret code, so the old `test-qr-codes/*.png` stop working.
+      Print new ones from the web portal's **QR Codes** page. **Regenerate** there makes a bike's old QR stop working.
+   7. **Remove bikes + low battery rule.** Run `supabase/migrations/011_remove_bike.sql`. The web portal's Bikes page
+      can then remove a bike (a never-used bike is deleted; one with rides or reports is retired so its history stays,
+      and its QR code stops working). Bikes at **20% lock battery or lower** show as **Unavailable** and can't be borrowed.
+      Both apps hide removed bikes, so run 011 before using the updated apps.
    - Free projects pause after ~1 week with no activity — open the dashboard before a demo.
    - Remaining work: replace the `// TODO:` comments in the code (search for `TODO` in VS Code).
 2. **Real smart lock (Bluetooth)** — Expo Go cannot use Bluetooth. When the ESP32 lock is ready:
@@ -125,7 +137,7 @@ mobile/
   src/data/mockData.ts        sample users, bikes, rides
   src/theme.ts                DYCI colors
 web/
-  src/App.tsx                 staff portal layout (sidebar, role-based pages)
+  src/App.tsx                 admin portal layout (sidebar, pages)
   src/components/             Login, Security, Maintenance, Work Order, Admin, Inventory, Report
   src/data/mockData.ts        sample data
 ```

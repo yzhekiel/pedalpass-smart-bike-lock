@@ -4,15 +4,17 @@ import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { BicycleItem, RideRecord, ScreenType, UserProfile } from './src/types';
 import { isSupabaseConfigured } from './src/lib/supabase';
-import { restoreSession, signOut } from './src/services/authService';
+import { IdentityDocs, restoreSession, signOut, submitIdentity } from './src/services/authService';
 import * as rideService from './src/services/rideService';
 import { colors } from './src/theme';
 import { BottomNavBar } from './src/components/BottomNavBar';
 import { LoginScreen } from './src/screens/LoginScreen';
 import { RegisterScreen } from './src/screens/RegisterScreen';
 import { HomeScreen } from './src/screens/HomeScreen';
+import { CampusMapScreen } from './src/screens/CampusMapScreen';
 import { ScanScreen } from './src/screens/ScanScreen';
-import { ActiveRideScreen, BikeCondition } from './src/screens/ActiveRideScreen';
+import { ActiveRideScreen, conditionOf } from './src/screens/ActiveRideScreen';
+import { InspectionResult } from './src/components/InspectionSheet';
 import { RideHistoryScreen } from './src/screens/RideHistoryScreen';
 import { ProfileScreen } from './src/screens/ProfileScreen';
 import { ReportIssueScreen } from './src/screens/ReportIssueScreen';
@@ -35,6 +37,13 @@ export default function App() {
   const [rides, setRides] = useState<RideRecord[]>([]);
   const [profile, setProfile] = useState<UserProfile | null>(null); // the signed-in user
   const [pendingEmail, setPendingEmail] = useState(''); // waiting for its 6-digit code
+  const [pendingDocs, setPendingDocs] = useState<IdentityDocs | null>(null); // sign-up photos, uploaded after the code
+  const [swap, setSwap] = useState<{ rideId: string; fromBikeId: string; reason: string } | null>(null); // scanning a replacement bike
+
+  // Leaving the Scan screen cancels a swap that was not finished (the current ride just continues)
+  React.useEffect(() => {
+    if (screen !== 'scan') setSwap(null);
+  }, [screen]);
 
   const loggedIn = !['login', 'register', 'verify_email', 'verify_identity'].includes(screen);
 
@@ -92,9 +101,23 @@ export default function App() {
     setScreen('login');
   };
 
-  const needsVerification = (email: string) => {
+  const needsVerification = (email: string, docs?: IdentityDocs) => {
     setPendingEmail(email);
+    setPendingDocs(docs ?? null);
     setScreen('verify_email');
+  };
+
+  // Sign-up step 2 done: upload the requirements from step 1, then continue
+  const emailVerified = async (p: UserProfile) => {
+    if (pendingDocs) {
+      try {
+        p = await submitIdentity(p.id, pendingDocs);
+      } catch (e) {
+        Alert.alert('Photos not uploaded', `${(e as Error).message}\nPlease add your requirements again.`);
+      }
+      setPendingDocs(null);
+    }
+    signedIn(p);
   };
 
   // Android hardware back button: go Home instead of closing the app
@@ -116,17 +139,35 @@ export default function App() {
   const setBikeStatus = (id: string, status: BicycleItem['status']) =>
     setBikes((prev) => prev.map((b) => (b.id === id ? { ...b, status } : b)));
 
-  /** Called by the Scan screen once the lock opened. `ride` is the ride from start_ride. */
+  /** Called by the Scan screen once the lock opened. `ride` is the ride from start_ride (or swap_bike). */
   const startRide = (bike: BicycleItem, ride: { rideId: string; startedAt: number }) => {
     setActiveBike({ ...bike, status: 'in_use' });
     setActiveRideId(ride.rideId);
     setRideStartedAt(ride.startedAt);
     setBikeStatus(bike.id, 'in_use');
+    if (swap) {
+      setBikeStatus(swap.fromBikeId, 'inspection');
+      setSwap(null);
+      if (profile) rideService.fetchRideHistory(profile.id).then(setRides).catch(() => {}); // the swapped-out ride ended
+    }
   };
 
-  /** Returns false when the ride could not be closed (it stays active). */
-  const endRide = async (condition: BikeCondition): Promise<boolean> => {
-    if (!activeBike || !rideStartedAt || !activeRideId) return false;
+  /** The server swapped bikes but the new lock did not open (and that ride was cancelled): no ride now. */
+  const swapAborted = () => {
+    setActiveBike(null);
+    setActiveRideId(null);
+    setRideStartedAt(null);
+    setSwap(null);
+    if (profile) rideService.fetchRideHistory(profile.id).then(setRides).catch(() => {});
+  };
+
+  /**
+   * Ends the ride with the condition from the return checklist, then sends any problems to maintenance.
+   * Returns false when the ride could not be closed (it stays active).
+   */
+  const endRide = async (inspection: InspectionResult): Promise<boolean> => {
+    if (!activeBike || !rideStartedAt || !activeRideId || !profile) return false;
+    const condition = conditionOf(inspection);
     let record: RideRecord;
     try {
       record = await rideService.endRide(activeRideId, condition);
@@ -134,11 +175,24 @@ export default function App() {
       Alert.alert('Could not end ride', `${(e as Error).message}\nCheck your internet connection and try again.`);
       return false;
     }
+    const bike = activeBike;
     setRides((prev) => [record, ...prev]);
-    setBikeStatus(activeBike.id, condition === 'damaged' ? 'maintenance' : 'available');
+    setBikeStatus(bike.id, condition === 'damaged' ? 'maintenance' : condition === 'minor' ? 'inspection' : 'available');
     setActiveBike(null);
     setActiveRideId(null);
     setRideStartedAt(null);
+
+    if (inspection.problems.length > 0) {
+      try {
+        const ticket = await rideService.reportInspection(profile, bike, 'return', inspection, false);
+        Alert.alert('Ride ended', `Ticket ${ticket.id} was sent to maintenance. Thank you for reporting!`);
+      } catch (e) {
+        Alert.alert('Ride ended, report not sent', `${(e as Error).message}\nPlease send it from Report Issue.`, [
+          { text: 'Report Issue', onPress: () => setScreen('report_issue') },
+        ]);
+      }
+    }
+    refreshBikes(); // the database may hold the bike back for an open ticket even after a good return
     return true;
   };
 
@@ -159,7 +213,7 @@ export default function App() {
           <RegisterScreen onNavigate={setScreen} onSignedIn={signedIn} onNeedsVerification={needsVerification} />
         )}
         {screen === 'verify_email' && (
-          <VerifyEmailScreen email={pendingEmail} onNavigate={setScreen} onVerified={signedIn} />
+          <VerifyEmailScreen email={pendingEmail} onNavigate={setScreen} onVerified={emailVerified} />
         )}
         {screen === 'verify_identity' && profile && (
           <VerifyIdentityScreen profile={profile} onProfileChange={signedIn} onLogout={logOut} />
@@ -167,7 +221,7 @@ export default function App() {
 
         {loggedIn && profile && (
           <>
-            {screen === 'home' && <HomeScreen user={profile} bikes={bikes} onNavigate={setScreen} activeBike={activeBike} />}
+            {screen === 'home' && <HomeScreen user={profile} bikes={bikes} rides={rides} onNavigate={setScreen} activeBike={activeBike} />}
             {screen === 'scan' && (
               <ScanScreen
                 user={profile}
@@ -176,6 +230,8 @@ export default function App() {
                 onNavigate={setScreen}
                 onStartRide={startRide}
                 onBikesChanged={refreshBikes}
+                swap={swap}
+                onSwapAborted={swapAborted}
               />
             )}
             {screen === 'active_ride' && (
@@ -185,9 +241,15 @@ export default function App() {
                 onNavigate={setScreen}
                 onEndRide={endRide}
                 onSos={sendSos}
+                onSwap={(reason) => {
+                  if (!activeRideId || !activeBike) return;
+                  setSwap({ rideId: activeRideId, fromBikeId: activeBike.id, reason });
+                  setScreen('scan');
+                }}
               />
             )}
             {screen === 'ride_history' && <RideHistoryScreen user={profile} rides={rides} onNavigate={setScreen} />}
+            {screen === 'campus_map' && <CampusMapScreen bikes={bikes} onNavigate={setScreen} />}
             {screen === 'profile' && (
               <ProfileScreen
                 user={profile}

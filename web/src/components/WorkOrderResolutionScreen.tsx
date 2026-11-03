@@ -1,3 +1,8 @@
+/**
+ * Mark as fixed — maintenance has no account: they tell the admin a bike is fixed, and the admin
+ * records it here (who fixed it and what was done). Resolving the bike's last open report makes it
+ * Available again automatically (migration 010).
+ */
 import React, { useState } from 'react';
 import { ScreenType, WorkOrderItem } from '../types';
 import { supabase } from '../lib/supabase';
@@ -8,154 +13,100 @@ interface WorkOrderResolutionScreenProps {
   onResolved: () => void;
 }
 
-const CHECKS = [
-  'Brake pads and caliper checked',
-  'Disc rotor trued (no drag or rubbing)',
-  'Tire pressure checked',
-  'Drivetrain cleaned and chain lubricated',
-  'Handlebars and stem bolts tight',
-  'Smart lock opens and locks correctly',
-];
-
 export const WorkOrderResolutionScreen: React.FC<WorkOrderResolutionScreenProps> = ({ order, onNavigate, onResolved }) => {
-  const [done, setDone] = useState<boolean[]>(CHECKS.map(() => false));
+  const [fixedBy, setFixedBy] = useState(order.assignedTech ?? '');
   const [notes, setNotes] = useState('');
+  const [confirmed, setConfirmed] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
-  const allDone = done.every(Boolean);
-
-  const handleSignOff = async () => {
+  const markFixed = async () => {
     setSaving(true);
     setError('');
-    const { error: ticketErr } = await supabase
+    const { error: err } = await supabase
       .from('work_orders')
-      .update({ status: 'Resolved', resolved_at: new Date().toISOString(), resolution_notes: notes.trim() || null })
+      .update({
+        status: 'Resolved',
+        resolved_at: new Date().toISOString(),
+        resolution_notes: notes.trim() || null,
+        assigned_tech: fixedBy.trim() || null,
+      })
       .eq('id', order.id);
-    if (ticketErr) {
-      setError(ticketErr.message);
+    if (err) {
+      setError(err.message);
       setSaving(false);
       return;
     }
-    // Put the bike back in service (only if it was held for maintenance)
-    const { error: bikeErr } = await supabase
-      .from('bikes')
-      .update({ status: 'available', updated_at: new Date().toISOString() })
-      .eq('id', order.bikeId)
-      .eq('status', 'maintenance');
-    if (bikeErr) {
-      setError(`Ticket resolved, but the bike could not be released: ${bikeErr.message}`);
-      setSaving(false);
-      return;
-    }
+    // The database makes the bike Available once its last open report is resolved
     onResolved();
     onNavigate('maintenance');
   };
 
+  const field = 'w-full px-3 py-2.5 bg-surface-container-lowest border border-outline-variant rounded-xl text-sm text-on-surface';
+
   return (
-    <div className="bg-background text-on-surface antialiased min-h-screen flex flex-col items-center selection:bg-primary selection:text-on-primary font-body-md text-sm pb-24">
-      <div className="w-full max-w-[640px] flex flex-col min-h-screen bg-surface-bright shadow-sm border-x border-surface-container">
-        {/* Top Header */}
-        <header className="sticky top-0 z-30 bg-surface/95 backdrop-blur-md px-4 md:px-6 py-3 flex items-center justify-between shadow-sm">
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => onNavigate('maintenance')}
-              aria-label="Go Back"
-              className="w-10 h-10 rounded-full flex items-center justify-center text-on-surface hover:bg-surface-container active:scale-95 transition-transform"
-              type="button"
-            >
-              <span className="material-symbols-outlined text-[22px]">arrow_back</span>
-            </button>
-            <div>
-              <h1 className="text-base font-bold text-on-surface">Work Order Resolution</h1>
-              <p className="text-[11px] text-primary font-bold">WO #{order.id} • {order.bikeId}</p>
-            </div>
-          </div>
-          <span className="text-xs bg-primary/10 text-primary font-bold px-2.5 py-1 rounded-full border border-primary/20">
-            {order.status}
+    <div className="max-w-3xl mx-auto px-4 lg:px-6 py-6 space-y-4">
+      <button onClick={() => onNavigate('maintenance')} className="flex items-center gap-1 text-sm font-semibold text-on-surface-variant hover:text-on-surface">
+        <span className="material-symbols-outlined text-[20px]">arrow_back</span>
+        List of Reports
+      </button>
+
+      {/* The report */}
+      <section className="bg-surface-container-lowest border border-outline-variant/50 rounded-2xl p-5 shadow-sm space-y-1.5">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-xs font-mono font-bold bg-primary-fixed text-on-primary-fixed px-2 py-0.5 rounded">{order.bikeId}</span>
+          <span className="text-xs font-mono text-on-surface-variant">{order.id}</span>
+          <span className="text-xs text-on-surface-variant">
+            {order.station} ({order.bay})
           </span>
-        </header>
+        </div>
+        <h2 className="text-lg font-bold text-on-surface">{order.issueTitle}</h2>
+        <p className="text-xs text-on-surface-variant">
+          {order.priorityLabel} • Reported by {order.reportedBy} • {order.timestamp}
+        </p>
+      </section>
 
-        <main className="flex-1 px-4 md:px-6 py-4 space-y-4">
-          {/* Ticket */}
-          <section className="bg-surface-container-lowest border border-outline-variant/60 rounded-2xl p-4 shadow-sm space-y-1">
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-mono font-bold bg-primary-fixed text-on-primary-fixed px-2 py-0.5 rounded">
-                {order.bikeId}
-              </span>
-              <span className="text-xs text-on-surface-variant">{order.station} ({order.bay})</span>
-            </div>
-            <h2 className="text-sm font-extrabold text-on-surface">{order.issueTitle}</h2>
-            <p className="text-[11px] text-on-surface-variant">
-              {order.priorityLabel} • Reported by {order.reportedBy} • {order.timestamp}
-            </p>
-            {order.assignedTech && <p className="text-[11px] text-on-surface-variant">Technician: {order.assignedTech}</p>}
-          </section>
+      {/* What maintenance said */}
+      <section className="bg-surface-container-lowest border border-outline-variant/50 rounded-2xl p-5 shadow-sm space-y-3">
+        <h3 className="text-base font-bold">What maintenance told you</h3>
+        <label className="block space-y-1">
+          <span className="text-xs font-semibold text-on-surface-variant">Fixed by</span>
+          <input value={fixedBy} onChange={(e) => setFixedBy(e.target.value)} placeholder="Name of the maintenance person" className={field} />
+        </label>
+        <label className="block space-y-1">
+          <span className="text-xs font-semibold text-on-surface-variant">What was fixed</span>
+          <textarea
+            rows={3}
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            placeholder="e.g. replaced front brake pads, pumped the rear tire"
+            className={field}
+          ></textarea>
+        </label>
+        <label className="flex items-start gap-2.5 p-3 rounded-xl bg-surface-container-low cursor-pointer select-none">
+          <input type="checkbox" checked={confirmed} onChange={() => setConfirmed(!confirmed)} className="w-4 h-4 mt-0.5 rounded text-primary-light" />
+          <span className="text-sm text-on-surface">
+            Maintenance confirmed <b>{order.bikeId}</b> is fixed and safe to ride.
+          </span>
+        </label>
+      </section>
 
-          {/* Mechanical Inspection Checklist */}
-          <section className="bg-surface-container-lowest border border-outline-variant/60 rounded-2xl p-4 shadow-sm space-y-3">
-            <div className="flex items-center justify-between border-b border-surface-container pb-2">
-              <div className="flex items-center gap-2">
-                <span className="material-symbols-outlined text-primary text-[20px]">checklist</span>
-                <h3 className="text-sm font-bold text-on-surface">Inspection Checklist</h3>
-              </div>
-              <span className="text-[10px] bg-primary/10 text-primary font-bold px-2 py-0.5 rounded-full">
-                {done.filter(Boolean).length}/{CHECKS.length} Completed
-              </span>
-            </div>
+      {error && <p className="text-sm font-bold text-error">{error}</p>}
 
-            <div className="space-y-2">
-              {CHECKS.map((label, i) => (
-                <label key={label} className="flex items-center gap-2.5 p-2 rounded-lg hover:bg-surface-container cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    checked={done[i]}
-                    onChange={() => setDone((prev) => prev.map((v, j) => (j === i ? !v : v)))}
-                    className="w-4 h-4 rounded text-primary focus:ring-primary"
-                  />
-                  <span className="text-xs text-on-surface font-medium">{label}</span>
-                </label>
-              ))}
-            </div>
-          </section>
-
-          {/* Tech Log Notes */}
-          <section className="bg-surface-container-lowest border border-outline-variant/60 rounded-2xl p-4 shadow-sm space-y-2">
-            <label className="text-xs font-bold text-on-surface uppercase tracking-wider block" htmlFor="notes">
-              Technician Log Notes
-            </label>
-            <textarea
-              id="notes"
-              rows={3}
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              placeholder="What was repaired or replaced?"
-              className="w-full p-2.5 bg-surface border border-outline-variant rounded-xl text-xs text-on-surface"
-            ></textarea>
-          </section>
-
-          {error && <p className="text-xs font-bold text-error">{error}</p>}
-
-          <div className="space-y-2 pt-1">
-            <button
-              onClick={handleSignOff}
-              disabled={!allDone || saving}
-              className="w-full h-[52px] bg-primary text-on-primary rounded-xl font-bold text-sm flex items-center justify-center gap-2 shadow-md hover:bg-primary-container active:scale-[0.98] transition-all disabled:opacity-50"
-            >
-              <span className="material-symbols-outlined text-[20px]">verified</span>
-              <span>{saving ? 'Saving…' : `Sign Off & Return ${order.bikeId} to Fleet`}</span>
-            </button>
-            {!allDone && <p className="text-[11px] text-on-surface-variant text-center">Tick every checklist item to sign off.</p>}
-
-            <button
-              onClick={() => onNavigate('maintenance')}
-              className="w-full py-2 text-xs text-on-surface-variant hover:text-on-surface text-center font-semibold"
-            >
-              Keep the bike locked and go back
-            </button>
-          </div>
-        </main>
+      <div className="flex flex-col sm:flex-row gap-2">
+        <button
+          onClick={markFixed}
+          disabled={!confirmed || saving}
+          className="flex-1 h-12 bg-primary text-on-primary rounded-xl font-bold text-sm flex items-center justify-center gap-2 shadow-sm hover:bg-primary-container disabled:opacity-50"
+        >
+          <span className="material-symbols-outlined text-[20px]">verified</span>
+          {saving ? 'Saving…' : `Mark as Fixed — ${order.bikeId} Ready to Ride`}
+        </button>
+        <button onClick={() => onNavigate('maintenance')} className="h-12 px-5 rounded-xl border border-outline-variant text-sm font-semibold hover:bg-surface-container">
+          Not fixed yet
+        </button>
       </div>
+      <p className="text-xs text-on-surface-variant">{order.bikeId} becomes Available automatically, unless it still has another open report.</p>
     </div>
   );
 };

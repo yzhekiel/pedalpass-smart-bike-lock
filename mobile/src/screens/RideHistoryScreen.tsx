@@ -25,12 +25,11 @@ export function RideHistoryScreen({ user, rides, onNavigate }: Props) {
 
   const totalKm = rides.reduce((s, r) => s + r.distanceKm, 0);
   const totalMin = rides.reduce((s, r) => s + r.durationMin, 0);
-  const co2 = totalKm * 0.12; // rough estimate vs. tricycle/jeep trip
 
   return (
     <Screen header={<Header title="Ride History" subtitle="Your PedalPass trips" onBack={() => onNavigate('home')} />}>
       {/* Summary */}
-      <Card style={{ backgroundColor: colors.primary, borderColor: colors.primary, gap: 10 }}>
+      <Card style={{ backgroundColor: colors.primaryFill, borderColor: colors.primaryFill, gap: 10 }}>
         <Row style={{ justifyContent: 'space-between' }}>
           <Row gap={6}>
             <Icon name="eco" size={20} color={colors.gold} />
@@ -45,7 +44,6 @@ export function RideHistoryScreen({ user, rides, onNavigate }: Props) {
             { v: String(rides.length), l: 'Rides' },
             { v: totalKm.toFixed(1), l: 'km' },
             { v: `${totalMin}m`, l: 'Ride time' },
-            { v: `${co2.toFixed(1)}kg`, l: 'CO₂ saved' },
           ].map((s) => (
             <View key={s.l} style={{ alignItems: 'center', flex: 1 }}>
               <T style={{ fontSize: 20, fontWeight: '800', color: '#fff' }}>{s.v}</T>
@@ -95,7 +93,7 @@ export function RideHistoryScreen({ user, rides, onNavigate }: Props) {
                 <Badge
                   label={r.status === 'Completed' ? 'Done' : 'Issue'}
                   bg={r.status === 'Completed' ? colors.successContainer : colors.tertiaryContainer}
-                  fg={r.status === 'Completed' ? colors.success : colors.onGold}
+                  fg={r.status === 'Completed' ? colors.success : colors.tertiary}
                 />
               </Row>
             </Card>
@@ -122,8 +120,6 @@ export function RideHistoryScreen({ user, rides, onNavigate }: Props) {
               <KeyValue k="Date" v={selected.dateLabel} />
               <KeyValue k="Duration" v={`${selected.durationMin} mins`} />
               <KeyValue k="Fee" v="₱0.00 (Campus service)" />
-              <Divider />
-              <KeyValue k="Carbon saved" v={`${(selected.distanceKm * 0.12).toFixed(2)} kg CO₂`} vStyle={{ color: colors.success }} />
             </View>
             <Row gap={8}>
               <Button

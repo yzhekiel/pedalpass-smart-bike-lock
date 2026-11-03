@@ -15,13 +15,11 @@ type Props = {
 };
 
 export function LoginScreen({ onNavigate, onSignedIn, onNeedsVerification }: Props) {
-  const [roleTab, setRoleTab] = useState<'student' | 'faculty'>('student');
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [remember, setRemember] = useState(true);
   const [signingIn, setSigningIn] = useState(false);
 
-  const switchRole = setRoleTab;
 
   const signIn = async () => {
     if (!isSupabaseConfigured) {
@@ -77,21 +75,6 @@ export function LoginScreen({ onNavigate, onSignedIn, onNeedsVerification }: Pro
         <T variant="tiny" style={{ color: colors.secondary }}>
           Dr. Yanga's Colleges, Inc. • Bocaue, Bulacan
         </T>
-      </View>
-
-      {/* Role switcher */}
-      <View style={styles.segment}>
-        {(['student', 'faculty'] as const).map((r) => {
-          const active = roleTab === r;
-          return (
-            <Pressable key={r} onPress={() => switchRole(r)} style={[styles.segBtn, active && styles.segBtnActive]}>
-              <Icon name={r === 'student' ? 'school' : 'badge'} size={18} color={active ? colors.primary : colors.secondary} />
-              <T variant="small" style={{ fontWeight: '800', color: active ? colors.primary : colors.secondary }}>
-                {r === 'student' ? 'Student' : 'Faculty / Staff'}
-              </T>
-            </Pressable>
-          );
-        })}
       </View>
 
       <Card style={{ gap: 14 }}>
@@ -152,7 +135,7 @@ export function LoginScreen({ onNavigate, onSignedIn, onNeedsVerification }: Pro
           </T>
         </Row>
         <T variant="tiny" style={{ color: colors.outline, textAlign: 'center' }}>
-          Security, maintenance & admin staff: use the PedalPass web portal.
+          Admins: use the PedalPass web portal.
         </T>
       </View>
     </Screen>
@@ -168,20 +151,4 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
   },
   liveDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.primaryContainer },
-  segment: {
-    flexDirection: 'row',
-    backgroundColor: colors.surfaceContainer,
-    padding: 4,
-    borderRadius: radius.md,
-  },
-  segBtn: {
-    flex: 1,
-    flexDirection: 'row',
-    gap: 6,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 10,
-    borderRadius: radius.sm,
-  },
-  segBtnActive: { backgroundColor: colors.surfaceContainerLowest },
 });

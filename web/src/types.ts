@@ -6,14 +6,19 @@ export type ScreenType =
   | 'active_ride'
   | 'ride_history'
   | 'security'
-  | 'report_issue'
   | 'maintenance'
   | 'resolution'
   | 'admin_dashboard'
-  | 'depot_inventory'
-  | 'verifications';
+  | 'verifications'
+  | 'qr_codes'
+  | 'activity_log'
+  | 'bikes'
+  | 'bike_history'
+  | 'maintenance_list'
+  | 'analytics';
 
-export type UserRole = 'student' | 'faculty' | 'security' | 'maintenance' | 'admin';
+/** Two roles: riders ('user', mobile app) and 'admin' (this portal). */
+export type UserRole = 'user' | 'admin';
 
 export interface UserProfile {
   id: string;
@@ -37,7 +42,8 @@ export interface BicycleItem {
   rangeKm: number;
   station: string;
   bay: string;
-  status: 'available' | 'in_use' | 'maintenance' | 'locked';
+  /** inspection = an issue was reported, maintenance must check it first (migration 009) */
+  status: 'available' | 'in_use' | 'inspection' | 'maintenance' | 'locked';
   imageUrl: string;
   nodeId: string;
 }
@@ -66,19 +72,11 @@ export interface WorkOrderItem {
   timestamp: string;
   status: 'Under Inspection' | 'Reported / Queued' | 'Scheduled for Overhaul' | 'Resolved';
   assignedTech?: string;
+  assignedStaffId?: string;
   partsAllocated?: string;
   nodeId: string;
   caliperPhotoUrl?: string;
-}
-
-export interface InventoryItem {
-  id: string;
-  name: string;
-  description: string;
-  stock: number;
-  unit: string;
-  percentage: number;
-  statusTag: string;
-  statusType: 'good' | 'warning' | 'critical' | 'normal';
-  reorderThreshold?: number;
+  createdAt: string; // ISO
+  resolvedAt?: string; // ISO
+  resolutionNotes?: string;
 }

@@ -44,9 +44,9 @@ export function ReportIssueScreen({ user, bikes, defaultBikeId, onNavigate, onSu
     }
     setSending(true);
     const issueTitle = `${component} — ${description.trim()}`;
-    const reportedBy = `${user.name} (${user.role === 'faculty' ? 'Faculty' : 'Student'})`;
+    const reportedBy = `${user.name} (${user.memberType === 'faculty' ? 'Faculty' : 'Student'})`;
     try {
-      // Saved to "work_orders" so maintenance staff see it on the web portal; the database gives the ticket number
+      // Saved to "work_orders" so admins see it on the web portal; the database gives the ticket number
       const ticket = await submitIssue({ reporterId: user.id, reportedBy, bike, priority: severity, issueTitle });
       onSubmitTicket(ticket);
       const downgraded =

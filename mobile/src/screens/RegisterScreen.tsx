@@ -5,17 +5,17 @@ import { ScreenType, UserProfile } from '../types';
 import { colors, radius } from '../theme';
 import { Icon } from '../components/Icon';
 import { Badge, Button, Card, Chip, Field, Header, Row, Screen, SectionTitle, T } from '../components/ui';
-import { signUp } from '../services/authService';
+import { IdentityDocs, signUp, submitIdentity } from '../services/authService';
 import { scanCor } from '../services/corService';
+import { FaceCheckCard, Photo, PhotoCard, useFaceCheck } from '../components/IdentityPhotos';
 
 type Props = {
   onNavigate: (screen: ScreenType) => void;
   onSignedIn: (profile: UserProfile) => void;
-  onNeedsVerification: (email: string) => void;
+  /** Step 2: the requirement photos are uploaded once the email code is verified */
+  onNeedsVerification: (email: string, docs: IdentityDocs) => void;
 };
 
-// Courses offered in the Course picker (a scanned course that is not listed is added automatically)
-const COURSES = ['BSIT', 'BSCS', 'BSIS', 'BSCpE', 'BSA', 'BSBA', 'BSED', 'BEED'];
 const YEARS = [1, 2, 3, 4];
 const ordinal = (n: number) => ['1st', '2nd', '3rd', '4th'][n - 1] + ' Year';
 const titleCase = (s: string) => s.toLowerCase().replace(/(^|\s)\S/g, (c) => c.toUpperCase());
@@ -23,7 +23,7 @@ const titleCase = (s: string) => s.toLowerCase().replace(/(^|\s)\S/g, (c) => c.t
 type ScanField = 'studentId' | 'lastName' | 'firstName' | 'middleName' | 'course' | 'yearLevel' | 'section';
 
 export function RegisterScreen({ onNavigate, onSignedIn, onNeedsVerification }: Props) {
-  const [role, setRole] = useState<'student' | 'faculty'>('student');
+  const [memberType, setMemberType] = useState<'student' | 'faculty'>('student');
   const [email, setEmail] = useState('');
   const [fullName, setFullName] = useState(''); // faculty only
   const [lastName, setLastName] = useState('');
@@ -43,6 +43,14 @@ export function RegisterScreen({ onNavigate, onSignedIn, onNeedsVerification }: 
   const [enrolled, setEnrolled] = useState(false);
   const [scanIssues, setScanIssues] = useState<string[] | null>(null);
   const [filled, setFilled] = useState<ScanField[]>([]);
+
+  // Identity requirements — the COR photo comes from Scan COR (students) or is picked (faculty)
+  const [corPhoto, setCorPhoto] = useState<Photo | null>(null);
+  const [idPhoto, setIdPhoto] = useState<Photo | null>(null);
+  const [selfie, setSelfie] = useState<Photo | null>(null);
+  const [consent, setConsent] = useState(false);
+  const face = useFaceCheck(idPhoto, selfie);
+  const isStudent = memberType === 'student';
 
   const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
   const checks = useMemo(
@@ -85,6 +93,7 @@ export function RegisterScreen({ onNavigate, onSignedIn, onNeedsVerification }: 
     setScanIssues(null);
     setEnrolled(false);
     setFilled([]);
+    setCorPhoto(null);
     setScanning(true);
     try {
       const r = await scanCor(asset.uri, asset.width);
@@ -92,6 +101,7 @@ export function RegisterScreen({ onNavigate, onSignedIn, onNeedsVerification }: 
         setScanIssues(r.issues.length ? r.issues : [r.is_cor ? 'The photo is too unclear to read.' : 'This does not look like a DYCI COR.']);
         return;
       }
+      setCorPhoto({ uri: asset.uri, base64: r.image });
       const next: Partial<Record<ScanField, string>> = {
         studentId: r.student_no ?? '',
         lastName: r.last_name ?? '',
@@ -122,18 +132,21 @@ export function RegisterScreen({ onNavigate, onSignedIn, onNeedsVerification }: 
     }
   };
 
-  const courses = course && !COURSES.includes(course) ? [...COURSES, course] : COURSES;
 
   const submit = async () => {
     if (!emailValid) {
       Alert.alert('Check your email', 'Enter a valid email address you can open.');
       return;
     }
-    if (role === 'faculty' && (!fullName.trim() || !studentId.trim())) {
+    if (memberType === 'faculty' && (!fullName.trim() || !studentId.trim())) {
       Alert.alert('Missing details', 'Full name and school ID are required.');
       return;
     }
-    if (role === 'student') {
+    if (memberType === 'student') {
+      if (!course) {
+        Alert.alert('Course missing', 'Scan your COR — your course is read from it.');
+        return;
+      }
       if (![lastName, firstName, middleName, studentId, course, section].every((v) => v.trim()) || !yearLevel) {
         Alert.alert('Missing details', 'Fill in every field, or scan your COR to fill them in.');
         return;
@@ -148,6 +161,19 @@ export function RegisterScreen({ onNavigate, onSignedIn, onNeedsVerification }: 
         return;
       }
     }
+    if (!idPhoto || (isStudent && (!corPhoto || !selfie))) {
+      const missing = [isStudent && !corPhoto && 'COR (scan it above)', !idPhoto && (isStudent ? 'School ID' : 'Faculty / Staff ID'), isStudent && !selfie && 'Selfie'];
+      Alert.alert('Requirements missing', `Add: ${missing.filter(Boolean).join(', ')}`);
+      return;
+    }
+    if (isStudent && !face.green) {
+      Alert.alert('Face match too low', 'Your selfie must strongly match your ID photo (green). Retake the photos and try again.');
+      return;
+    }
+    if (!consent) {
+      Alert.alert('Consent required', 'Please agree to the Data Privacy notice.');
+      return;
+    }
     if (strength < 4) {
       Alert.alert('Weak password', 'Your password must meet all 4 policy criteria.');
       return;
@@ -161,19 +187,38 @@ export function RegisterScreen({ onNavigate, onSignedIn, onNeedsVerification }: 
       const profile = await signUp({
         email,
         password,
-        role,
-        name: role === 'student' ? `${firstName.trim()} ${middleName.trim()} ${lastName.trim()}` : fullName,
+        memberType,
+        name: memberType === 'student' ? `${firstName.trim()} ${middleName.trim()} ${lastName.trim()}` : fullName,
         studentId,
-        ...(role === 'student' ? { course, yearLevel: ordinal(yearLevel!), section } : {}),
+        ...(memberType === 'student' ? { course, yearLevel: ordinal(yearLevel!), section } : {}),
       });
-      // profile is null when Supabase emailed a verification code
-      if (profile) onSignedIn(profile);
-      else onNeedsVerification(email.trim());
+      // Faculty/staff only send their ID
+      const docs: IdentityDocs = isStudent
+        ? { id: idPhoto.base64, cor: corPhoto!.base64, selfie: selfie!.base64 }
+        : { id: idPhoto.base64 };
+      // profile is null when Supabase emailed a verification code (step 2 uploads the photos)
+      if (profile) onSignedIn(await submitIdentity(profile.id, docs));
+      else onNeedsVerification(email.trim(), docs);
     } catch (e) {
       setSubmitting(false);
       Alert.alert('Could not create account', (e as Error).message);
     }
   };
+
+  // Step 1 progress: every requirement that is done
+  const requirements = isStudent
+    ? [
+        emailValid,
+        [lastName, firstName, middleName, section, course].every((v) => v.trim()) && !!yearLevel && /^\d{4}-\d{5}$/.test(studentId.trim()) && enrolled,
+        !!corPhoto,
+        !!idPhoto,
+        !!selfie,
+        face.green,
+        consent,
+        strength >= 4 && matches,
+      ]
+    : [emailValid, !!fullName.trim() && !!studentId.trim(), !!idPhoto, consent, strength >= 4 && matches];
+  const progress = Math.round((requirements.filter(Boolean).length / requirements.length) * 100);
 
   return (
     <Screen
@@ -186,26 +231,35 @@ export function RegisterScreen({ onNavigate, onSignedIn, onNeedsVerification }: 
         />
       }
     >
-      <Card style={{ backgroundColor: colors.surfaceContainerLow, gap: 6 }}>
-        <Row gap={6}>
-          <Icon name="verified_user" size={20} color={colors.primary} />
-          <T variant="h3">DYCI Identity Check</T>
+      {face.element}
+
+      <Card style={{ backgroundColor: colors.surfaceContainerLow, gap: 8 }}>
+        <Row style={{ justifyContent: 'space-between' }}>
+          <Row gap={6}>
+            <Icon name="verified_user" size={20} color={colors.primary} />
+            <T variant="h3">Step 1 of 2 · Requirements</T>
+          </Row>
+          <T variant="small" style={{ fontWeight: '800', color: progress === 100 ? colors.success : colors.primary }}>
+            {progress}%
+          </T>
         </Row>
-        <T variant="small">
-          Use an email you can open (Gmail, Yahoo or your school email). After signing up you'll add a photo of your{' '}
-          <T variant="small" style={{ fontWeight: '800', color: colors.primary }}>
-            school ID, COR and a selfie
-          </T>{' '}
-          so campus staff can confirm you're a DYCI student or faculty.
+        <View style={styles.track}>
+          <View style={[styles.fill, { width: `${progress}%`, backgroundColor: progress === 100 ? colors.success : colors.primary }]} />
+        </View>
+        <T variant="tiny">
+          {isStudent
+            ? 'Fill in your details and add your COR, school ID and a selfie.'
+            : 'Fill in your details and add a photo of your faculty / staff ID.'}{' '}
+          Step 2 is the code we email you — then your account goes to a PedalPass admin for approval.
         </T>
       </Card>
 
-      {role === 'student' && (
+      {memberType === 'student' && (
         <Card style={{ gap: 10 }}>
           <SectionTitle icon="document_scanner">Scan COR</SectionTitle>
           <T variant="tiny">
-            Take a clear photo of your Certificate of Registration. We read it to fill in your details below. The photo
-            is not saved.
+            Take a clear photo of your Certificate of Registration. We read it to fill in your details below, and the
+            same photo is sent as your COR requirement.
           </T>
           {preview && <Image source={{ uri: preview }} style={styles.preview} resizeMode="cover" />}
           {scanning && (
@@ -262,15 +316,15 @@ export function RegisterScreen({ onNavigate, onSignedIn, onNeedsVerification }: 
         />
 
         <View style={{ gap: 6 }}>
-          <T variant="label">Select Campus Role *</T>
+          <T variant="label">I am a *</T>
           <Row gap={8}>
             {(['student', 'faculty'] as const).map((r) => {
-              const active = role === r;
+              const active = memberType === r;
               return (
-                <Pressable key={r} onPress={() => setRole(r)} style={[styles.roleBtn, active && styles.roleBtnActive]}>
+                <Pressable key={r} onPress={() => setMemberType(r)} style={[styles.roleBtn, active && styles.roleBtnActive]}>
                   <Icon name={r === 'student' ? 'school' : 'badge'} size={18} color={active ? '#fff' : colors.secondary} />
                   <T variant="small" style={{ fontWeight: '800', color: active ? '#fff' : colors.secondary }}>
-                    {r === 'student' ? 'Student' : 'Faculty / Staff'}
+                    {r === 'student' ? 'Student' : 'Faculty'}
                   </T>
                 </Pressable>
               );
@@ -278,17 +332,17 @@ export function RegisterScreen({ onNavigate, onSignedIn, onNeedsVerification }: 
           </Row>
           <Row gap={6}>
             <Icon name="shield" size={15} color={colors.outline} />
-            <T variant="tiny">Administrator and maintenance roles are assigned by campus IT.</T>
+            <T variant="tiny">Admin accounts are created by campus IT.</T>
           </Row>
         </View>
       </Card>
 
       <Card style={{ gap: 12 }}>
         <SectionTitle icon="assignment_ind">Academic Information</SectionTitle>
-        {role === 'faculty' && (
+        {memberType === 'faculty' && (
           <Field label="Full Name" icon="person" value={fullName} onChangeText={setFullName} autoCapitalize="words" />
         )}
-        {role === 'student' && (
+        {memberType === 'student' && (
           <>
             <Field
               label="Last Name *"
@@ -317,31 +371,25 @@ export function RegisterScreen({ onNavigate, onSignedIn, onNeedsVerification }: 
           </>
         )}
         <Field
-          label={role === 'student' ? 'Student No. (as on your ID)' : 'Employee / School ID No.'}
+          label={memberType === 'student' ? 'Student No. (as on your ID)' : 'Employee / School ID No.'}
           icon="pin"
           value={studentId}
-          onChangeText={role === 'student' ? edit('studentId', setStudentId) : setStudentId}
-          placeholder={role === 'student' ? 'e.g. 2024-09536' : undefined}
-          keyboardType={role === 'student' ? 'numbers-and-punctuation' : 'default'}
+          onChangeText={memberType === 'student' ? edit('studentId', setStudentId) : setStudentId}
+          placeholder={memberType === 'student' ? 'e.g. 2024-09536' : undefined}
+          keyboardType={memberType === 'student' ? 'numbers-and-punctuation' : 'default'}
           highlight={green('studentId')}
         />
-        {role === 'student' && (
+        {memberType === 'student' && (
           <>
+            {/* Read from the COR — students can't pick it themselves */}
             <View style={{ gap: 6 }}>
               <T variant="label">Course *</T>
-              <Row gap={6} style={{ flexWrap: 'wrap' }}>
-                {courses.map((c) => (
-                  <View key={c} style={green('course') && course === c ? styles.filledChip : undefined}>
-                    <Chip
-                      label={c}
-                      selected={course === c}
-                      onPress={() => {
-                        setCourse(c);
-                        setFilled((f) => f.filter((x) => x !== 'course'));
-                      }}
-                    />
-                  </View>
-                ))}
+              <Row gap={8} style={[styles.readOnly, course ? styles.filledChip : undefined]}>
+                <Icon name="auto_stories" size={20} color={course ? colors.success : colors.outline} />
+                <T variant="small" style={{ flex: 1, fontWeight: course ? '800' : '400', color: course ? colors.onSurface : colors.outline }}>
+                  {course || 'Scan your COR — the course is read from it'}
+                </T>
+                {course ? <Icon name="lock" size={16} color={colors.success} /> : null}
               </Row>
             </View>
             <View style={{ gap: 6 }}>
@@ -381,6 +429,47 @@ export function RegisterScreen({ onNavigate, onSignedIn, onNeedsVerification }: 
           </>
         )}
       </Card>
+
+      <SectionTitle icon="badge">Identity Requirements</SectionTitle>
+      <PhotoCard
+        title={isStudent ? 'School ID' : 'Faculty / Staff ID'}
+        hint={
+          isStudent
+            ? 'Front of your DYCI ID, out of the plastic holder if possible'
+            : 'Front of your DYCI faculty or staff ID — this is your only requirement'
+        }
+        icon="badge"
+        photo={idPhoto}
+        onChange={setIdPhoto}
+      />
+      {isStudent && (
+        <>
+          <PhotoCard
+            title="Selfie"
+            hint="Face the camera in good light, no mask or sunglasses"
+            icon="face"
+            photo={selfie}
+            selfie
+            onChange={setSelfie}
+          />
+          <FaceCheckCard check={face.check} onRetry={face.retry} />
+        </>
+      )}
+
+      <Pressable onPress={() => setConsent(!consent)}>
+        <Card style={{ flexDirection: 'row', gap: 10 }}>
+          <Icon
+            name={consent ? 'check_box' : 'check_box_outline_blank'}
+            size={22}
+            color={consent ? colors.primary : colors.outline}
+          />
+          <T variant="tiny" style={{ flex: 1 }}>
+            {isStudent
+              ? 'I agree that PedalPass may collect my school ID, COR and selfie only to verify my identity, under the Data Privacy Act of 2012 (RA 10173). My selfie is compared with my ID photo on this phone, and PedalPass admins review the photos before approving me. Only admins can view them. My selfie and COR are deleted after review; my ID photo is kept while I have a PedalPass account so admins can identify who rode a bike.'
+              : 'I agree that PedalPass may collect a photo of my ID only to verify my identity, under the Data Privacy Act of 2012 (RA 10173). PedalPass admins review it before approving me. Only admins can view it, and it is kept while I have a PedalPass account so admins can identify who rode a bike.'}
+          </T>
+        </Card>
+      </Pressable>
 
       <Card style={{ gap: 12 }}>
         <SectionTitle icon="key">Security Credentials</SectionTitle>
@@ -434,15 +523,16 @@ export function RegisterScreen({ onNavigate, onSignedIn, onNeedsVerification }: 
       <Card style={{ flexDirection: 'row', gap: 10, backgroundColor: colors.secondaryContainer }}>
         <Icon name="mark_email_read" size={22} color={colors.primary} />
         <View style={{ flex: 1 }}>
-          <T variant="h3">Email Verification</T>
+          <T variant="h3">Step 2 · Email Verification</T>
           <T variant="tiny">
-            After you submit, a 6-digit code is sent to your email. Then you'll add your school ID, COR and a selfie.
+            After you submit, a 6-digit code is sent to your email. Enter it to finish — your requirements are then sent
+            to campus staff for approval.
           </T>
         </View>
       </Card>
 
       <Button
-        label={submitting ? 'Creating Account...' : 'Create Account & Verify Email'}
+        label={submitting ? 'Creating Account...' : 'Submit Requirements & Verify Email'}
         iconRight="arrow_forward"
         loading={submitting}
         onPress={submit}
@@ -471,9 +561,19 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.outlineVariant,
   },
-  roleBtnActive: { backgroundColor: colors.primary, borderColor: colors.primary },
+  roleBtnActive: { backgroundColor: colors.primaryFill, borderColor: colors.primaryFill },
   bar: { flex: 1, height: 6, borderRadius: 3 },
+  track: { height: 8, borderRadius: 4, backgroundColor: colors.surfaceContainerHigh, overflow: 'hidden' },
+  fill: { height: 8, borderRadius: 4 },
   preview: { width: '100%', height: 180, borderRadius: radius.md, backgroundColor: colors.surfaceContainer },
   issues: { gap: 2, padding: 10, borderRadius: radius.md, backgroundColor: colors.errorContainer },
+  readOnly: {
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.outlineVariant,
+    backgroundColor: colors.surfaceContainerLow,
+  },
   filledChip: { borderRadius: radius.md, borderWidth: 2, borderColor: colors.success, backgroundColor: colors.successContainer },
 });

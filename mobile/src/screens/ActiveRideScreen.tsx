@@ -3,30 +3,59 @@ import { Alert, Linking, StyleSheet, View } from 'react-native';
 import { BicycleItem, ScreenType } from '../types';
 import { colors, radius } from '../theme';
 import { Icon } from '../components/Icon';
-import { Badge, Button, Card, Chip, Header, Row, Screen, Sheet, T } from '../components/ui';
+import { Badge, Button, Card, Chip, Field, Header, Row, Screen, Sheet, T } from '../components/ui';
+import { InspectionResult, InspectionSheet } from '../components/InspectionSheet';
 import { confirmLocked } from '../services/lockService';
 
 export type BikeCondition = 'good' | 'minor' | 'damaged';
+
+/** The return checklist decides the condition end_ride records. */
+export const conditionOf = (r: InspectionResult): BikeCondition =>
+  r.unsafe ? 'damaged' : r.problems.length ? 'minor' : 'good';
 
 type Props = {
   bike: BicycleItem | null;
   startedAt: number | null;
   onNavigate: (screen: ScreenType) => void;
-  /** Resolves false if the ride could not be ended (an error was already shown). */
-  onEndRide: (condition: BikeCondition) => Promise<boolean>;
+  /** Ends the ride and sends any problems to maintenance. Resolves false if the ride could not be ended. */
+  onEndRide: (inspection: InspectionResult) => Promise<boolean>;
   /** Saves an SOS alert for campus security; throws if it could not be sent. */
   onSos: () => Promise<void>;
+  /** The current bike is locked; go scan another one to swap to, for this reason. */
+  onSwap: (reason: string) => void;
 };
+
+const SWAP_REASONS = ['Flat tire', 'Brakes', 'Chain', 'Seat / handlebar', 'Lock problem', 'Other'];
 
 const pad = (n: number) => n.toString().padStart(2, '0');
 const formatTimer = (s: number) => `${pad(Math.floor(s / 3600))}:${pad(Math.floor((s % 3600) / 60))}:${pad(s % 60)}`;
 
-export function ActiveRideScreen({ bike, startedAt, onNavigate, onEndRide, onSos }: Props) {
+export function ActiveRideScreen({ bike, startedAt, onNavigate, onEndRide, onSos, onSwap }: Props) {
   const [now, setNow] = useState(Date.now());
   const [docking, setDocking] = useState(false);
-  const [condition, setCondition] = useState<BikeCondition>('good');
+  const [inspecting, setInspecting] = useState(false);
   const [sosOpen, setSosOpen] = useState(false);
   const [sosSending, setSosSending] = useState(false);
+  const [swapOpen, setSwapOpen] = useState(false);
+  const [swapReason, setSwapReason] = useState('');
+  const [swapNote, setSwapNote] = useState('');
+  const [swapLocking, setSwapLocking] = useState(false);
+
+  // The old bike must be locked at the station before the rider takes another one
+  const startSwap = async () => {
+    if (!bike) return;
+    setSwapLocking(true);
+    try {
+      if (!(await confirmLocked(bike))) {
+        Alert.alert('Lock not closed', `Park ${bike.id} at the station and close its lock first.`);
+        return;
+      }
+      setSwapOpen(false);
+      onSwap(swapNote.trim() ? `${swapReason} — ${swapNote.trim()}` : swapReason);
+    } finally {
+      setSwapLocking(false);
+    }
+  };
 
   const raiseSos = async () => {
     setSosSending(true);
@@ -70,22 +99,18 @@ export function ActiveRideScreen({ bike, startedAt, onNavigate, onEndRide, onSos
   const elapsed = Math.max(0, Math.floor((now - startedAt) / 1000));
   const overLimit = elapsed > 45 * 60;
 
-  const endRide = async () => {
+  const endRide = async (inspection: InspectionResult) => {
     setDocking(true);
     try {
       const locked = await confirmLocked(bike);
       if (!locked) {
+        setInspecting(false);
         Alert.alert('Lock not closed', 'Close the smart lock fully, then try again.');
         return;
       }
-      if (!(await onEndRide(condition))) return;
-      if (condition === 'damaged') {
-        Alert.alert('Ride ended', 'Thanks! Please tell us what needs repair.', [
-          { text: 'Report Issue', onPress: () => onNavigate('report_issue') },
-        ]);
-      } else {
-        onNavigate('ride_history');
-      }
+      if (!(await onEndRide(inspection))) return;
+      setInspecting(false);
+      onNavigate('ride_history');
     } finally {
       setDocking(false);
     }
@@ -125,33 +150,14 @@ export function ActiveRideScreen({ bike, startedAt, onNavigate, onEndRide, onSos
             <Icon name="location_on" size={20} color={colors.primary} />
             <T variant="h3">Return Station</T>
           </Row>
-          <Badge label="Bay 04 Assigned" bg={colors.secondaryContainer} fg={colors.onSecondaryContainer} />
+          <Badge label={bike.bay} bg={colors.secondaryContainer} fg={colors.onSecondaryContainer} />
         </Row>
         <T variant="h2" style={{ fontSize: 16 }}>
-          Main Gate Station Hub
+          {bike.station}
         </T>
-        <T variant="tiny">Bay 04 • Lock ready</T>
-        <Row gap={4}>
-          <Icon name="bluetooth_searching" size={15} color={colors.primary} />
-          <T variant="tiny">Lock beacon detected nearby</T>
-        </Row>
-        <Button
-          label="Change Station"
-          small
-          variant="outline"
-          style={{ alignSelf: 'flex-start' }}
-          onPress={() => Alert.alert('Other stations', 'Science Quad and Admin Hall hubs also have free bays.')}
-        />
-      </Card>
-
-      {/* Condition */}
-      <Card style={{ gap: 10 }}>
-        <T variant="h3">Bicycle condition before returning</T>
-        <Row gap={8} style={{ flexWrap: 'wrap' }}>
-          <Chip label="Good" icon="check_circle" selected={condition === 'good'} activeColor={colors.success} onPress={() => setCondition('good')} />
-          <Chip label="Minor issue" icon="warning" selected={condition === 'minor'} activeColor={colors.tertiary} onPress={() => setCondition('minor')} />
-          <Chip label="Needs repair" icon="build" selected={condition === 'damaged'} activeColor={colors.error} onPress={() => setCondition('damaged')} />
-        </Row>
+        <T variant="tiny">
+          Elida Campus Covered Court, beside Bldg. B. Bring {bike.id} back here and lock it to {bike.bay}.
+        </T>
       </Card>
 
       {/* How to dock */}
@@ -160,7 +166,8 @@ export function ActiveRideScreen({ bike, startedAt, onNavigate, onEndRide, onSos
         <View style={{ flex: 1 }}>
           <T variant="h3">How to return</T>
           <T variant="tiny">
-            Park at the bay and close the smart ring lock. The lock sensor confirms it is closed, then your ride ends.
+            Park at the bay, check the bike, and close the smart ring lock. The lock sensor confirms it is closed, then your
+            ride ends. Any problem you report goes straight to maintenance.
           </T>
         </View>
       </Card>
@@ -169,7 +176,40 @@ export function ActiveRideScreen({ bike, startedAt, onNavigate, onEndRide, onSos
         label={docking ? 'Checking lock & syncing...' : 'End Ride & Lock Bicycle'}
         icon="lock"
         loading={docking}
-        onPress={endRide}
+        onPress={() => setInspecting(true)}
+      />
+      <Button label="Problem with this bike? Swap Bike" icon="swap_horiz" variant="outline" onPress={() => setSwapOpen(true)} />
+
+      <Sheet visible={swapOpen} onClose={() => !swapLocking && setSwapOpen(false)}>
+        <T variant="h3">Swap {bike.id} for another bike</T>
+        <T variant="tiny">
+          Bring {bike.id} back to {bike.station} and lock it. Your ride continues on the new bike, and maintenance gets a
+          report about {bike.id}.
+        </T>
+        <T variant="label">What is wrong?</T>
+        <Row gap={8} style={{ flexWrap: 'wrap' }}>
+          {SWAP_REASONS.map((r) => (
+            <Chip key={r} label={r} selected={swapReason === r} activeColor={colors.error} onPress={() => setSwapReason(r)} />
+          ))}
+        </Row>
+        <Field value={swapNote} onChangeText={setSwapNote} placeholder="More details (optional)" icon="edit_note" autoCapitalize="sentences" />
+        <Button
+          label={swapLocking ? 'Checking lock…' : 'Lock This Bike & Scan New One'}
+          icon="qr_code_scanner"
+          loading={swapLocking}
+          disabled={!swapReason}
+          onPress={startSwap}
+        />
+        <Button label="Cancel" variant="ghost" disabled={swapLocking} onPress={() => setSwapOpen(false)} />
+      </Sheet>
+
+      <InspectionSheet
+        visible={inspecting}
+        mode="return"
+        bikeId={bike.id}
+        busy={docking}
+        onClose={() => setInspecting(false)}
+        onDone={endRide}
       />
 
       <Sheet visible={sosOpen} onClose={() => setSosOpen(false)}>
@@ -205,6 +245,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  timerCard: { backgroundColor: colors.primary, borderColor: colors.primary, gap: 8, borderRadius: radius.xl },
-  timer: { fontSize: 44, fontWeight: '800', color: '#fff', fontVariant: ['tabular-nums'], letterSpacing: 1 },
+  timerCard: { backgroundColor: colors.primaryFill, borderColor: colors.primaryFill, gap: 8, borderRadius: radius.xl },
+  // lineHeight must match the font size: T's default (body) line height of 19 cuts the digits off
+  timer: { fontSize: 44, lineHeight: 54, fontWeight: '800', color: '#fff', fontVariant: ['tabular-nums'], letterSpacing: 1 },
 });

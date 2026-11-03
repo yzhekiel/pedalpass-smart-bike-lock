@@ -28,7 +28,7 @@ async function load() {
       .eq('status', 'active')
       .order('started_at'),
     supabase.from('alerts').select('*').eq('resolved', false).order('created_at', { ascending: false }).limit(20),
-    supabase.from('bikes').select('id', { count: 'exact', head: true }).eq('status', 'maintenance'),
+    supabase.from('bikes').select('id', { count: 'exact', head: true }).in('status', ['maintenance', 'inspection']),
     supabase.from('work_orders').select('id', { count: 'exact', head: true }).neq('status', 'Resolved'),
   ]);
   for (const r of [rides, alerts, maintenance, tickets]) if (r.error) throw r.error;
@@ -53,30 +53,8 @@ export const SecurityScreen: React.FC<SecurityScreenProps> = ({ profile, onNavig
   const overdue = data?.rides.filter((r) => minutesSince(r.started_at) > OVERDUE_MIN) ?? [];
 
   return (
-    <div className="bg-background text-on-surface antialiased min-h-screen flex flex-col items-center selection:bg-primary selection:text-on-primary font-body-md text-sm pb-24">
-      <div className="w-full max-w-[640px] flex flex-col min-h-screen bg-surface-bright shadow-sm border-x border-surface-container relative">
-        <header className="sticky top-0 z-30 bg-surface/95 backdrop-blur-md px-4 md:px-6 py-3 flex items-center justify-between shadow-sm">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-primary text-on-primary flex items-center justify-center font-bold text-sm shadow-sm">
-              {profile.name.charAt(0).toUpperCase()}
-            </div>
-            <div>
-              <div className="flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-full bg-primary-container animate-pulse"></span>
-                <span className="text-[11px] font-bold text-primary tracking-wide">ON DUTY</span>
-              </div>
-              <h1 className="text-sm font-extrabold text-on-surface">{profile.name}</h1>
-              {profile.title && <p className="text-[10px] text-on-surface-variant">{profile.title}</p>}
-            </div>
-          </div>
-          <button
-            onClick={reload}
-            aria-label="Refresh"
-            className="w-9 h-9 rounded-full bg-surface-container text-on-surface-variant flex items-center justify-center hover:bg-surface-container-high"
-          >
-            <span className="material-symbols-outlined text-[18px]">refresh</span>
-          </button>
-        </header>
+    <div className="text-on-surface antialiased flex flex-col items-center font-body-md text-sm">
+      <div className="w-full max-w-[640px] flex flex-col relative">
 
         <main className="flex-1 px-4 md:px-6 py-4 space-y-4">
           {!data ? (
@@ -113,7 +91,7 @@ export const SecurityScreen: React.FC<SecurityScreenProps> = ({ profile, onNavig
                       <span className="text-[10px] text-outline">{formatTime(a.created_at)}</span>
                     </div>
                     {a.message && <p className="text-[11px] text-on-surface-variant">{a.message}</p>}
-                    <button onClick={() => resolveAlert(a.id)} className="text-[11px] text-primary font-bold hover:underline">
+                    <button onClick={() => resolveAlert(a.id)} className="text-[11px] text-primary-light font-bold hover:underline">
                       Mark as handled
                     </button>
                   </div>
@@ -124,10 +102,10 @@ export const SecurityScreen: React.FC<SecurityScreenProps> = ({ profile, onNavig
               <section className="bg-surface-container-lowest border border-primary/50 rounded-2xl p-4 shadow-sm space-y-3">
                 <div className="flex items-center justify-between border-b border-surface-container pb-2">
                   <div className="flex items-center gap-2">
-                    <span className="material-symbols-outlined text-primary text-[20px]">shield</span>
+                    <span className="material-symbols-outlined text-primary-light text-[20px]">shield</span>
                     <h3 className="text-sm font-bold text-on-surface">Riders Out Now</h3>
                   </div>
-                  <span className="text-[10px] bg-primary/10 text-primary font-bold px-2 py-0.5 rounded-full">
+                  <span className="text-[10px] bg-primary-light/10 text-primary-light font-bold px-2 py-0.5 rounded-full">
                     {data.rides.length} active
                   </span>
                 </div>
@@ -149,7 +127,7 @@ export const SecurityScreen: React.FC<SecurityScreenProps> = ({ profile, onNavig
                         <p className="text-xs text-on-surface-variant">
                           {[r.profiles?.course, r.profiles?.section].filter(Boolean).join(' • ')}
                         </p>
-                        <p className={`text-[11px] font-semibold mt-0.5 ${late ? 'text-error' : 'text-primary'}`}>
+                        <p className={`text-[11px] font-semibold mt-0.5 ${late ? 'text-error' : 'text-primary-light'}`}>
                           Unit: {r.bike_id} • Elapsed: {mins} mins{late && ' (overdue)'}
                         </p>
                       </div>
@@ -157,14 +135,6 @@ export const SecurityScreen: React.FC<SecurityScreenProps> = ({ profile, onNavig
                   );
                 })}
               </section>
-
-              <button
-                onClick={() => onNavigate('report_issue')}
-                className="w-full py-2.5 rounded-xl border border-outline-variant text-xs font-bold text-primary hover:bg-surface-container flex items-center justify-center gap-2"
-              >
-                <span className="material-symbols-outlined text-[18px]">report_problem</span>
-                Report a bicycle problem
-              </button>
             </>
           )}
         </main>
