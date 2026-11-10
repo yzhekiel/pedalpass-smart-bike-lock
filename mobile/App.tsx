@@ -17,7 +17,6 @@ import { ActiveRideScreen, conditionOf } from './src/screens/ActiveRideScreen';
 import { InspectionResult } from './src/components/InspectionSheet';
 import { RideHistoryScreen } from './src/screens/RideHistoryScreen';
 import { ProfileScreen } from './src/screens/ProfileScreen';
-import { ReportIssueScreen } from './src/screens/ReportIssueScreen';
 import { VerifyEmailScreen } from './src/screens/VerifyEmailScreen';
 import { VerifyIdentityScreen } from './src/screens/VerifyIdentityScreen';
 
@@ -183,14 +182,19 @@ export default function App() {
     setRideStartedAt(null);
 
     if (inspection.problems.length > 0) {
-      try {
-        const ticket = await rideService.reportInspection(profile, bike, 'return', inspection, false);
-        Alert.alert('Ride ended', `Ticket ${ticket.id} was sent to maintenance. Thank you for reporting!`);
-      } catch (e) {
-        Alert.alert('Ride ended, report not sent', `${(e as Error).message}\nPlease send it from Report Issue.`, [
-          { text: 'Report Issue', onPress: () => setScreen('report_issue') },
-        ]);
-      }
+      // The return checklist is the rider's only way to report, so offer a retry if sending fails
+      const send = async () => {
+        try {
+          const ticket = await rideService.reportInspection(profile, bike, 'return', inspection, false);
+          Alert.alert('Ride ended', `Ticket ${ticket.id} was sent to maintenance. Thank you for reporting!`);
+        } catch (e) {
+          Alert.alert('Ride ended, report not sent', `${(e as Error).message}\nCheck your internet connection.`, [
+            { text: 'Not now', style: 'cancel' },
+            { text: 'Try again', onPress: send },
+          ]);
+        }
+      };
+      await send();
     }
     refreshBikes(); // the database may hold the bike back for an open ticket even after a good return
     return true;
@@ -248,7 +252,15 @@ export default function App() {
                 }}
               />
             )}
-            {screen === 'ride_history' && <RideHistoryScreen user={profile} rides={rides} onNavigate={setScreen} />}
+            {screen === 'ride_history' && (
+              <RideHistoryScreen
+                user={profile}
+                rides={rides}
+                onNavigate={setScreen}
+                activeBike={activeBike}
+                rideStartedAt={rideStartedAt}
+              />
+            )}
             {screen === 'campus_map' && <CampusMapScreen bikes={bikes} onNavigate={setScreen} />}
             {screen === 'profile' && (
               <ProfileScreen
@@ -257,15 +269,6 @@ export default function App() {
                 hasActiveRide={!!activeBike}
                 onNavigate={setScreen}
                 onLogout={logOut}
-              />
-            )}
-            {screen === 'report_issue' && (
-              <ReportIssueScreen
-                user={profile}
-                bikes={bikes}
-                defaultBikeId={rides[0]?.bikeId}
-                onNavigate={setScreen}
-                onSubmitTicket={refreshBikes} // the database takes a P1 bike out of service
               />
             )}
             <BottomNavBar current={screen} hasActiveRide={!!activeBike} onNavigate={setScreen} />

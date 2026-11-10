@@ -208,7 +208,7 @@ export function ScanScreen({ user, bikes, hasActiveRide, onNavigate, onStartRide
         reportInspection(user, bike, 'borrow', problems, true)
           .then((t) => Alert.alert('Report sent', `Ticket ${t.id} was sent to maintenance. Ride safely!`))
           .catch((e) =>
-            Alert.alert('Report not sent', `${(e as Error).message}\nYou can send it from Report Issue after your ride.`),
+            Alert.alert('Report not sent', `${(e as Error).message}\nReport it again in the check when you end your ride.`),
           );
       }
     } catch (e) {

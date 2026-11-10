@@ -1,5 +1,7 @@
 # PedalPass — Campus Bicycle Access System (DYCI)
 
+> **Full documentation:** [docs/DOCUMENTATION.md](docs/DOCUMENTATION.md) — setup, running the apps, admin accounts, how each page works, troubleshooting.
+
 This folder has two apps that work together:
 
 | Folder | Who uses it | Built with | How to open |

@@ -15,8 +15,9 @@ type Props = {
 export function BottomNavBar({ current, hasActiveRide, onNavigate }: Props) {
   const insets = useSafeAreaInsets();
 
-  const Tab = ({ icon, label, screen, dot }: { icon: string; label: string; screen: ScreenType; dot?: boolean }) => {
-    const active = screen === current;
+  /** `also`: other screens that belong to this tab (it stays highlighted on them) */
+  const Tab = ({ icon, label, screen, also = [], dot }: { icon: string; label: string; screen: ScreenType; also?: ScreenType[]; dot?: boolean }) => {
+    const active = screen === current || also.includes(current);
     return (
       <Pressable
         onPress={() => onNavigate(screen)}
@@ -35,7 +36,8 @@ export function BottomNavBar({ current, hasActiveRide, onNavigate }: Props) {
     <View style={[styles.wrap, { bottom: Math.max(insets.bottom, 10) + 6 }]} pointerEvents="box-none">
       <View style={styles.bar}>
         <Tab icon="home" label="Home" screen="home" />
-        <Tab icon="history" label="Ride history" screen="ride_history" />
+        {/* My Rides = the ride in progress (active_ride) + past rides */}
+        <Tab icon="pedal_bike" label="My rides" screen="ride_history" also={['active_ride']} dot={hasActiveRide} />
         <Pressable
           onPress={() => onNavigate('scan')}
           style={[styles.scan, current === 'scan' && { backgroundColor: colors.ink }]}
@@ -44,7 +46,7 @@ export function BottomNavBar({ current, hasActiveRide, onNavigate }: Props) {
         >
           <Icon name="qr_code_scanner" size={26} color={current === 'scan' ? '#fff' : colors.onGold} />
         </Pressable>
-        <Tab icon="pedal_bike" label="My ride" screen="active_ride" dot={hasActiveRide} />
+        <Tab icon="map" label="Campus map" screen="campus_map" />
         <Tab icon="person" label="Profile" screen="profile" />
       </View>
     </View>

@@ -81,7 +81,7 @@ export function ActiveRideScreen({ bike, startedAt, onNavigate, onEndRide, onSos
 
   if (!bike || !startedAt) {
     return (
-      <Screen header={<Header title="My Ride" subtitle="No active session" onBack={() => onNavigate('home')} />}>
+      <Screen header={<Header title="My Ride" subtitle="No active session" onBack={() => onNavigate('ride_history')} />}>
         <Card style={{ alignItems: 'center', gap: 10, paddingVertical: 30 }}>
           <View style={styles.emptyIcon}>
             <Icon name="pedal_bike" size={36} color={colors.primary} />
@@ -122,6 +122,7 @@ export function ActiveRideScreen({ bike, startedAt, onNavigate, onEndRide, onSos
         <Header
           title="Active Ride"
           subtitle={`${bike.id} • In transit`}
+          onBack={() => onNavigate('ride_history')}
           right={<Button label="SOS" icon="emergency" small variant="danger" onPress={() => setSosOpen(true)} />}
         />
       }

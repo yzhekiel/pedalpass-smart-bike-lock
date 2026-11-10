@@ -10,7 +10,6 @@ export type ScreenType =
   | 'profile'
   | 'campus_map'
   | 'security'
-  | 'report_issue'
   | 'maintenance'
   | 'resolution'
   | 'admin_dashboard'

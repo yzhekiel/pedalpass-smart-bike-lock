@@ -1,6 +1,6 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
-import { RideRecord, ScreenType, UserProfile } from '../types';
+import { BicycleItem, RideRecord, ScreenType, UserProfile } from '../types';
 import { colors, radius } from '../theme';
 import { Icon } from '../components/Icon';
 import { Badge, Button, Card, Chip, Divider, Header, KeyValue, Row, Screen, Sheet, T } from '../components/ui';
@@ -9,11 +9,14 @@ type Props = {
   user: UserProfile;
   rides: RideRecord[];
   onNavigate: (screen: ScreenType) => void;
+  /** The ride in progress, shown on top (My Rides = the current ride + past rides) */
+  activeBike: BicycleItem | null;
+  rideStartedAt: number | null;
 };
 
 type Filter = 'all' | 'week' | 'issues';
 
-export function RideHistoryScreen({ user, rides, onNavigate }: Props) {
+export function RideHistoryScreen({ user, rides, onNavigate, activeBike, rideStartedAt }: Props) {
   const [filter, setFilter] = useState<Filter>('all');
   const [selected, setSelected] = useState<RideRecord | null>(null);
 
@@ -27,7 +30,23 @@ export function RideHistoryScreen({ user, rides, onNavigate }: Props) {
   const totalMin = rides.reduce((s, r) => s + r.durationMin, 0);
 
   return (
-    <Screen header={<Header title="Ride History" subtitle="Your PedalPass trips" onBack={() => onNavigate('home')} />}>
+    <Screen header={<Header title="My Rides" subtitle="Your ride now and your past trips" onBack={() => onNavigate('home')} />}>
+      {/* Ride in progress */}
+      {activeBike && rideStartedAt ? (
+        <CurrentRide bikeId={activeBike.id} station={activeBike.station} startedAt={rideStartedAt} onOpen={() => onNavigate('active_ride')} />
+      ) : (
+        <Card style={styles.noRide}>
+          <View style={styles.noRideIcon}>
+            <Icon name="pedal_bike" size={22} color={colors.primary} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <T variant="h3">No ride right now</T>
+            <T variant="tiny">Scan a bike at the Covered Court to start one.</T>
+          </View>
+          <Button label="Scan" small variant="accent" icon="qr_code_scanner" onPress={() => onNavigate('scan')} />
+        </Card>
+      )}
+
       {/* Summary */}
       <Card style={{ backgroundColor: colors.primaryFill, borderColor: colors.primaryFill, gap: 10 }}>
         <Row style={{ justifyContent: 'space-between' }}>
@@ -121,19 +140,7 @@ export function RideHistoryScreen({ user, rides, onNavigate }: Props) {
               <KeyValue k="Duration" v={`${selected.durationMin} mins`} />
               <KeyValue k="Fee" v="₱0.00 (Campus service)" />
             </View>
-            <Row gap={8}>
-              <Button
-                label="Report Problem"
-                variant="outline"
-                small
-                style={{ flex: 1 }}
-                onPress={() => {
-                  setSelected(null);
-                  onNavigate('report_issue');
-                }}
-              />
-              <Button label="Close" small style={{ flex: 1 }} onPress={() => setSelected(null)} />
-            </Row>
+            <Button label="Close" small onPress={() => setSelected(null)} />
           </>
         )}
       </Sheet>
@@ -141,7 +148,52 @@ export function RideHistoryScreen({ user, rides, onNavigate }: Props) {
   );
 }
 
+const pad = (n: number) => n.toString().padStart(2, '0');
+
+/** The ride in progress: bike, running time, and a button to the ride screen (end ride, SOS, swap). */
+function CurrentRide({ bikeId, station, startedAt, onOpen }: { bikeId: string; station: string; startedAt: number; onOpen: () => void }) {
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, []);
+  const s = Math.max(0, Math.floor((now - startedAt) / 1000));
+  return (
+    <Card style={styles.current}>
+      <Row style={{ justifyContent: 'space-between' }}>
+        <Row gap={6}>
+          <View style={styles.liveDot} />
+          <T variant="tiny" style={{ color: colors.onPrimaryContainer, fontWeight: '800', letterSpacing: 0.6 }}>
+            RIDE IN PROGRESS
+          </T>
+        </Row>
+        <Badge label={bikeId} />
+      </Row>
+      <T style={styles.timer}>
+        {pad(Math.floor(s / 3600))}:{pad(Math.floor((s % 3600) / 60))}:{pad(s % 60)}
+      </T>
+      <T variant="tiny" style={{ color: colors.onPrimaryContainer }}>
+        Return it to {station} when you're done.
+      </T>
+      <Button label="Open ride" icon="arrow_forward" variant="accent" onPress={onOpen} />
+    </Card>
+  );
+}
+
 const styles = StyleSheet.create({
+  current: { backgroundColor: colors.primaryFill, gap: 8 },
+  liveDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.success },
+  // lineHeight must match the font size, or the digits get cut off
+  timer: { fontSize: 36, lineHeight: 44, fontWeight: '800', color: '#fff', fontVariant: ['tabular-nums'] },
+  noRide: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  noRideIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: radius.md,
+    backgroundColor: colors.secondaryContainer,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   bikeTag: {
     width: 54,
     height: 40,

@@ -60,7 +60,7 @@ export function ProfileScreen({ user, rides, hasActiveRide, onNavigate, onLogout
         <KeyValue k="Completed rides" v={String(rides.length)} />
         <KeyValue k="Total distance" v={`${totalKm} km`} />
         <Divider />
-        <Button label="View ride history" icon="history" variant="outline" onPress={() => onNavigate('ride_history')} />
+        <Button label="My rides" icon="pedal_bike" variant="outline" onPress={() => onNavigate('ride_history')} />
       </Card>
 
       {user.verificationStatus === 'rejected' && user.rejectionReason ? (

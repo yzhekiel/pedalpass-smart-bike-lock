@@ -34,8 +34,7 @@ export function HomeScreen({ user, bikes, rides, onNavigate, activeBike }: Props
   const actions: { icon: string; label: string; to: ScreenType; highlight?: boolean }[] = [
     { icon: 'qr_code_scanner', label: 'Scan', to: 'scan', highlight: true },
     { icon: 'map', label: 'Map', to: 'campus_map' },
-    { icon: 'history', label: 'History', to: 'ride_history' },
-    { icon: 'report_problem', label: 'Report', to: 'report_issue' },
+    { icon: 'pedal_bike', label: 'My rides', to: 'ride_history' },
     { icon: 'person', label: 'Profile', to: 'profile' },
   ];
 
