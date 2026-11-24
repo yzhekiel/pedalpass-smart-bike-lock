@@ -10,8 +10,9 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createClient } from '@supabase/supabase-js';
 import { AppState } from 'react-native';
 
-const url = process.env.EXPO_PUBLIC_SUPABASE_URL;
-const publishableKey = process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+const url = process.env.EXPO_PUBLIC_SUPABASE_URL || 'https://zxhdfkcsbdsmtyfwhqej.supabase.co';
+const publishableKey =
+  process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY || 'sb_publishable_xcQbqUx91M9kH_cTZi_9Mg_gb_8Umuv';
 
 /** False until the .env.local keys are filled in — the app keeps using mock data until then. */
 export const isSupabaseConfigured = Boolean(url && publishableKey);

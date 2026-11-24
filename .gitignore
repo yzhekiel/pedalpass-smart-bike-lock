@@ -18,9 +18,6 @@ Thumbs.db
 # Local AI agent tooling
 .claude/
 
-# Angular admin portal: local Supabase settings
-web-angular/src/environments/environment.ts
-
 # PlatformIO build cache
 firmware/.pio/
 expo_go_qr.png
