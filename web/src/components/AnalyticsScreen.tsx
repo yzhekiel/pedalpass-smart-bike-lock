@@ -261,7 +261,10 @@ export function AnalyticsScreen({ onOpenBike }: { onOpenBike: (bikeId: string) =
                   <p className="text-[11px] mt-0.5">
                     {c.delta ? (
                       <span className={good ? 'text-success' : 'text-error'}>
-                        {c.delta.up ? '↑' : '↓'} {c.delta.text}
+                        <span className="material-symbols-outlined text-[14px] align-[-3px] mr-0.5">
+                          {c.delta.up ? 'trending_up' : 'trending_down'}
+                        </span>
+                        {c.delta.text}
                       </span>
                     ) : (
                       <span className="text-outline">no change</span>
@@ -279,7 +282,11 @@ export function AnalyticsScreen({ onOpenBike }: { onOpenBike: (bikeId: string) =
           <Panel
             title={`Rides per ${groupWord}`}
             note={`${data.rides.length} rides in the last ${days} days`}
-            badge={view.totalChange ? { text: `${view.totalChange.up ? '↑' : '↓'} ${view.totalChange.text} vs the ${days} days before`, good: view.totalChange.up } : undefined}
+            badge={view.totalChange ? {
+              text: `${view.totalChange.text} vs the ${days} days before`,
+              good: view.totalChange.up,
+              icon: view.totalChange.up ? 'trending_up' : 'trending_down',
+            } : undefined}
           >
             <TrendChart
               points={view.trend.map((b) => ({
@@ -420,7 +427,17 @@ function FleetStatus({ bikes }: { bikes: BicycleItem[] }) {
   );
 }
 
-function Panel({ title, note, badge, children }: { title: string; note?: string; badge?: { text: string; good: boolean }; children: React.ReactNode }) {
+function Panel({
+  title,
+  note,
+  badge,
+  children,
+}: {
+  title: string;
+  note?: string;
+  badge?: { text: string; good: boolean; icon?: string };
+  children: React.ReactNode;
+}) {
   return (
     <section className="bg-surface-container-lowest border border-outline-variant/60 rounded-2xl p-5">
       <div className="flex flex-wrap items-start justify-between gap-2 mb-4">
@@ -429,7 +446,10 @@ function Panel({ title, note, badge, children }: { title: string; note?: string;
           {note && <p className="text-xs text-on-surface-variant mt-0.5">{note}</p>}
         </div>
         {badge && (
-          <span className={`text-xs font-semibold px-2.5 py-1 rounded-lg ${badge.good ? 'bg-success-container text-success' : 'bg-error-container text-error'}`}>{badge.text}</span>
+          <span className={`inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-lg ${badge.good ? 'bg-success-container text-success' : 'bg-error-container text-error'}`}>
+            {badge.icon && <span className="material-symbols-outlined text-[15px]">{badge.icon}</span>}
+            {badge.text}
+          </span>
         )}
       </div>
       {children}

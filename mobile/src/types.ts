@@ -8,7 +8,6 @@ export type ScreenType =
   | 'active_ride'
   | 'ride_history'
   | 'profile'
-  | 'campus_map'
   | 'security'
   | 'maintenance'
   | 'resolution'

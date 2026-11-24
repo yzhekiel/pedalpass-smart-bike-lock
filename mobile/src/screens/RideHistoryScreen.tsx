@@ -31,32 +31,19 @@ export function RideHistoryScreen({ user, rides, onNavigate, activeBike, rideSta
 
   return (
     <Screen header={<Header title="My Rides" subtitle="Your ride now and your past trips" onBack={() => onNavigate('home')} />}>
-      {/* Ride in progress */}
-      {activeBike && rideStartedAt ? (
-        <CurrentRide bikeId={activeBike.id} station={activeBike.station} startedAt={rideStartedAt} onOpen={() => onNavigate('active_ride')} />
-      ) : (
-        <Card style={styles.noRide}>
-          <View style={styles.noRideIcon}>
-            <Icon name="pedal_bike" size={22} color={colors.primary} />
-          </View>
-          <View style={{ flex: 1 }}>
-            <T variant="h3">No ride right now</T>
-            <T variant="tiny">Scan a bike at the Covered Court to start one.</T>
-          </View>
-          <Button label="Scan" small variant="accent" icon="qr_code_scanner" onPress={() => onNavigate('scan')} />
-        </Card>
-      )}
+      <Row gap={8} style={styles.filters}>
+        <Chip label="All" selected={filter === 'all'} onPress={() => setFilter('all')} />
+        <Chip label="This Week" selected={filter === 'week'} onPress={() => setFilter('week')} />
+        <Chip label="With Issues" selected={filter === 'issues'} onPress={() => setFilter('issues')} />
+      </Row>
 
       {/* Summary */}
-      <Card style={{ backgroundColor: colors.primaryFill, borderColor: colors.primaryFill, gap: 10 }}>
-        <Row style={{ justifyContent: 'space-between' }}>
-          <Row gap={6}>
-            <Icon name="eco" size={20} color={colors.gold} />
-            <T variant="h3" style={{ color: '#fff' }}>
-              My Ride Summary
-            </T>
-          </Row>
-          <Badge label="Green Rider" />
+      <Card style={styles.summary}>
+        <Row gap={6}>
+          <Icon name="insights" size={20} color={colors.gold} />
+          <T variant="h3" style={{ color: '#fff' }}>
+            My Ride Summary
+          </T>
         </Row>
         <Row style={{ justifyContent: 'space-between' }}>
           {[
@@ -74,11 +61,10 @@ export function RideHistoryScreen({ user, rides, onNavigate, activeBike, rideSta
         </Row>
       </Card>
 
-      <Row gap={8}>
-        <Chip label="All" selected={filter === 'all'} onPress={() => setFilter('all')} />
-        <Chip label="This Week" selected={filter === 'week'} onPress={() => setFilter('week')} />
-        <Chip label="With Issues" selected={filter === 'issues'} onPress={() => setFilter('issues')} />
-      </Row>
+      {/* Only show this section when a ride is actually in progress. */}
+      {activeBike && rideStartedAt ? (
+        <CurrentRide bikeId={activeBike.id} station={activeBike.station} startedAt={rideStartedAt} onOpen={() => onNavigate('active_ride')} />
+      ) : null}
 
       {shown.length === 0 ? (
         <Card style={{ alignItems: 'center', paddingVertical: 24 }}>
@@ -181,19 +167,12 @@ function CurrentRide({ bikeId, station, startedAt, onOpen }: { bikeId: string; s
 }
 
 const styles = StyleSheet.create({
+  filters: { alignSelf: 'stretch', flexWrap: 'wrap' },
+  summary: { backgroundColor: colors.primaryFill, gap: 14, paddingVertical: 20 },
   current: { backgroundColor: colors.primaryFill, gap: 8 },
   liveDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.success },
   // lineHeight must match the font size, or the digits get cut off
   timer: { fontSize: 36, lineHeight: 44, fontWeight: '800', color: '#fff', fontVariant: ['tabular-nums'] },
-  noRide: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  noRideIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: radius.md,
-    backgroundColor: colors.secondaryContainer,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   bikeTag: {
     width: 54,
     height: 40,

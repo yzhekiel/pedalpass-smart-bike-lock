@@ -5,7 +5,7 @@ import { colors, radius } from '../theme';
 import { Icon } from '../components/Icon';
 import { Badge, Button, Card, Chip, Field, Header, Row, Screen, Sheet, T } from '../components/ui';
 import { InspectionResult, InspectionSheet } from '../components/InspectionSheet';
-import { confirmLocked } from '../services/lockService';
+import { confirmLocked, resumeRideBike, tempLockBike } from '../services/lockService';
 
 export type BikeCondition = 'good' | 'minor' | 'damaged';
 
@@ -40,6 +40,32 @@ export function ActiveRideScreen({ bike, startedAt, onNavigate, onEndRide, onSos
   const [swapReason, setSwapReason] = useState('');
   const [swapNote, setSwapNote] = useState('');
   const [swapLocking, setSwapLocking] = useState(false);
+  const [tempLocked, setTempLocked] = useState(false);
+  const [parkBusy, setParkBusy] = useState(false);
+
+  const toggleTempLock = async () => {
+    if (!bike) return;
+    setParkBusy(true);
+    try {
+      if (!tempLocked) {
+        const res = await tempLockBike(bike);
+        if (!res.ok) {
+          Alert.alert('Could not park bike', res.message);
+          return;
+        }
+        setTempLocked(true);
+      } else {
+        const res = await resumeRideBike(bike);
+        if (!res.ok) {
+          Alert.alert('Could not resume ride', res.message);
+          return;
+        }
+        setTempLocked(false);
+      }
+    } finally {
+      setParkBusy(false);
+    }
+  };
 
   // The old bike must be locked at the station before the rider takes another one
   const startSwap = async () => {
@@ -172,6 +198,22 @@ export function ActiveRideScreen({ bike, startedAt, onNavigate, onEndRide, onSos
           </T>
         </View>
       </Card>
+
+      <Button
+        label={
+          parkBusy
+            ? tempLocked
+              ? 'Opening smart lock...'
+              : 'Engaging park lock...'
+            : tempLocked
+              ? 'Resume Ride (Unlock Bicycle)'
+              : 'Temporary Lock (Park Outside Classroom)'
+        }
+        icon={tempLocked ? 'lock_open' : 'pause_circle_filled'}
+        variant={tempLocked ? 'primary' : 'outline'}
+        loading={parkBusy}
+        onPress={toggleTempLock}
+      />
 
       <Button
         label={docking ? 'Checking lock & syncing...' : 'End Ride & Lock Bicycle'}

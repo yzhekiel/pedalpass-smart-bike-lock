@@ -95,7 +95,9 @@ function Dashboard({
         <p className="text-sm mt-2 text-on-surface-variant">
           {v.change !== null && (
             <span className={`font-semibold mr-1.5 ${v.change >= 0 ? 'text-success' : 'text-error'}`}>
-              {v.change >= 0 ? '↑' : '↓'}
+              <span className="material-symbols-outlined text-[16px] align-[-3px] mr-0.5">
+                {v.change >= 0 ? 'trending_up' : 'trending_down'}
+              </span>
               {Math.abs(v.change).toFixed(1)}%
             </span>
           )}

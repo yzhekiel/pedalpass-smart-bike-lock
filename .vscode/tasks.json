@@ -1,0 +1,77 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "1. Setup All Dependencies (npm install + env files)",
+      "type": "shell",
+      "command": "powershell -ExecutionPolicy Bypass -File \"${workspaceFolder}/setup-project.ps1\"",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "new"
+      }
+    },
+    {
+      "label": "2. Start Mobile App (Expo Web & Expo Go - Port 8081)",
+      "type": "shell",
+      "command": "npx expo start --lan",
+      "options": {
+        "cwd": "${workspaceFolder}/mobile"
+      },
+      "isBackground": true,
+      "problemMatcher": []
+    },
+    {
+      "label": "3. Start Admin Web Portal (React/Vite - Port 3000)",
+      "type": "shell",
+      "command": "npm run dev",
+      "options": {
+        "cwd": "${workspaceFolder}/web"
+      },
+      "isBackground": true,
+      "problemMatcher": []
+    },
+    {
+      "label": "4. Start Admin Web Portal (Angular 22 - Port 4200)",
+      "type": "shell",
+      "command": "npx ng serve --host 0.0.0.0 --port 4200",
+      "options": {
+        "cwd": "${workspaceFolder}/web-angular"
+      },
+      "isBackground": true,
+      "problemMatcher": []
+    },
+    {
+      "label": "5. Start ESP32 Hardware Wi-Fi Bridge (Port 3001)",
+      "type": "shell",
+      "command": "node esp32-bridge.mjs",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "isBackground": true,
+      "problemMatcher": []
+    },
+    {
+      "label": "6. ESP32 Firmware: Build (PlatformIO)",
+      "type": "shell",
+      "command": "\"$env:USERPROFILE\\.platformio\\penv\\Scripts\\platformio.exe\" run --environment esp32dev",
+      "options": {
+        "cwd": "${workspaceFolder}/firmware"
+      },
+      "problemMatcher": [
+        "$gcc"
+      ]
+    },
+    {
+      "label": "7. ESP32 Firmware: Upload & Monitor (PlatformIO)",
+      "type": "shell",
+      "command": "\"$env:USERPROFILE\\.platformio\\penv\\Scripts\\platformio.exe\" run --target upload --target monitor --environment esp32dev",
+      "options": {
+        "cwd": "${workspaceFolder}/firmware"
+      },
+      "problemMatcher": [
+        "$gcc"
+      ]
+    }
+  ]
+}

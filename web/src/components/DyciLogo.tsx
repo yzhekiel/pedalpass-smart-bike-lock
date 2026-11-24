@@ -40,9 +40,11 @@ export const DyciLogo: React.FC<DyciLogoProps> = ({ className = '', size = 64 })
 
       <text fill="#FFFFFF" fontSize="11" fontWeight="800" letterSpacing="1.8" fontFamily="system-ui, sans-serif">
         <textPath href="#bottom-curve" startOffset="50%" textAnchor="middle">
-          ★ BOCAUE, BULACAN ★
+          BOCAUE, BULACAN
         </textPath>
       </text>
+      <circle cx="35" cy="132" r="2.5" fill="#F5B82E" />
+      <circle cx="165" cy="132" r="2.5" fill="#F5B82E" />
 
       {/* Center White Shield / Cross */}
       {/* Horizontal Bar */}
@@ -63,14 +65,16 @@ export const DyciLogo: React.FC<DyciLogoProps> = ({ className = '', size = 64 })
         1950
       </text>
 
-      {/* Golden Stars flanking 1950 */}
-      <text x="63" y="102" fill="#F5B82E" fontSize="9" fontWeight="bold">★ ★</text>
-      <text x="122" y="102" fill="#F5B82E" fontSize="9" fontWeight="bold">★ ★</text>
+      {/* Simple golden markers flanking 1950 */}
+      <circle cx="64" cy="99" r="2.6" fill="#F5B82E" />
+      <circle cx="73" cy="99" r="2.6" fill="#F5B82E" />
+      <circle cx="127" cy="99" r="2.6" fill="#F5B82E" />
+      <circle cx="136" cy="99" r="2.6" fill="#F5B82E" />
 
-      {/* 3 Vertical Stars down the stem */}
-      <text x="100" y="117" fill="#F5B82E" fontSize="9" fontWeight="bold" textAnchor="middle">★</text>
-      <text x="100" y="131" fill="#F5B82E" fontSize="9" fontWeight="bold" textAnchor="middle">★</text>
-      <text x="100" y="145" fill="#F5B82E" fontSize="9" fontWeight="bold" textAnchor="middle">★</text>
+      {/* Simple markers down the stem */}
+      <circle cx="100" cy="115" r="2.8" fill="#F5B82E" />
+      <circle cx="100" cy="129" r="2.8" fill="#F5B82E" />
+      <circle cx="100" cy="143" r="2.8" fill="#F5B82E" />
 
       {/* Open Book of Knowledge (Top) */}
       <g transform="translate(76, 44)">

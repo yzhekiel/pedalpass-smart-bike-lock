@@ -1,0 +1,66 @@
+<div class="overlay" (click)="!saving() && cancelled.emit()">
+  <form class="dialog" [formGroup]="form" (ngSubmit)="submit()" (click)="$event.stopPropagation()" novalidate>
+    <div class="row">
+      <h2 class="grow">{{ bike() ? 'Edit ' + bike()!.id : 'Add bike' }}</h2>
+      <button type="button" class="btn ghost" (click)="cancelled.emit()" [disabled]="saving()" aria-label="Close">
+        <span class="icon">close</span>
+      </button>
+    </div>
+
+    <div class="field">
+      <label for="code">Bike code (printed on the QR)</label>
+      <input id="code" class="input mono" formControlName="id" [class.invalid]="bad('id')" />
+      @if (bad('id')) {
+        <span class="error-text">
+          @if (form.controls.id.hasError('taken')) {
+            This code is already used by another bike.
+          } @else {
+            Use the form BP-001 (BP, a dash and 3 digits) so the app can scan it.
+          }
+        </span>
+      }
+    </div>
+
+    <div class="field">
+      <label for="lock">Smart lock ID</label>
+      <input id="lock" class="input" formControlName="node_id" [class.invalid]="bad('node_id')" />
+      @if (bad('node_id')) {
+        <span class="error-text">Enter the lock's ID, as set on the lock hardware.</span>
+      }
+    </div>
+
+    <div class="row wrap">
+      <div class="field grow">
+        <label for="bay">Bay</label>
+        <input id="bay" class="input" formControlName="bay" [class.invalid]="bad('bay')" />
+        @if (bad('bay')) {
+          <span class="error-text">Enter the bike's parking spot, e.g. Bay 11.</span>
+        }
+      </div>
+      <div class="field" style="width: 130px">
+        <label for="battery">Lock battery %</label>
+        <input id="battery" class="input" type="number" min="0" max="100" formControlName="battery" [class.invalid]="bad('battery')" />
+        @if (bad('battery')) {
+          <span class="error-text">0 to 100.</span>
+        }
+      </div>
+    </div>
+
+    <div class="field">
+      <label for="model">Model</label>
+      <input id="model" class="input" formControlName="model" [class.invalid]="bad('model')" />
+    </div>
+
+    <p class="small muted">
+      Station: {{ station }}.
+      {{ bike() ? 'The status is set by the system and is not edited here.' : 'A new bike starts as Available and gets its QR code right away.' }}
+    </p>
+
+    <div class="row">
+      <button type="button" class="btn grow" (click)="cancelled.emit()" [disabled]="saving()">Cancel</button>
+      <button type="submit" class="btn primary grow" [disabled]="saving()">
+        {{ saving() ? 'Saving…' : bike() ? 'Save changes' : 'Save & make QR code' }}
+      </button>
+    </div>
+  </form>
+</div>

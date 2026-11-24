@@ -1,0 +1,51 @@
+<div class="page">
+  <section class="card row wrap" style="align-items: flex-end">
+    <div class="field">
+      <label for="from">From</label>
+      <input id="from" class="input" type="date" [(ngModel)]="from" [max]="to()" (change)="load()" />
+    </div>
+    <div class="field">
+      <label for="to">To</label>
+      <input id="to" class="input" type="date" [(ngModel)]="to" [min]="from()" (change)="load()" />
+    </div>
+    <div class="field" style="width: 130px">
+      <label for="bike">Bike</label>
+      <input id="bike" class="input" [(ngModel)]="bike" placeholder="BP-001" (keyup.enter)="load()" (blur)="load()" />
+    </div>
+    <div class="field grow">
+      <label for="q">Search</label>
+      <input id="q" class="input" [(ngModel)]="search" placeholder="Student, staff, ticket, details…" />
+    </div>
+  </section>
+
+  <section class="card" style="padding: 0">
+    @if (loading()) {
+      <div class="state"><div class="spinner"></div>Loading activity…</div>
+    } @else if (error()) {
+      <div class="state error"><span class="icon">cloud_off</span><p>{{ error() }}</p><button class="btn" (click)="load()">Try again</button></div>
+    } @else {
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>When</th><th>Action</th><th>Bike</th><th>Rider</th><th>Done by</th><th>Details</th></tr>
+          </thead>
+          <tbody>
+            @for (r of shown(); track r.id) {
+              <tr>
+                <td class="muted small" style="white-space: nowrap">{{ r.created_at | date: 'MMM d, h:mm a' }}</td>
+                <td style="white-space: nowrap"><strong>{{ label[r.action] ?? r.action }}</strong></td>
+                <td class="mono">{{ r.bike_id ?? '—' }}</td>
+                <td>{{ r.user_name ?? '—' }}</td>
+                <td>{{ r.actor_name ?? '—' }}</td>
+                <td class="muted small">{{ r.details }}</td>
+              </tr>
+            } @empty {
+              <tr><td colspan="6"><div class="state">Nothing happened in this period with these filters.</div></td></tr>
+            }
+          </tbody>
+        </table>
+      </div>
+      <p class="small muted" style="padding: 12px 18px">{{ shown().length }} entries</p>
+    }
+  </section>
+</div>

@@ -1,0 +1,38 @@
+{
+  "folders": [
+    {
+      "name": "1. PedalPass Root (Docs & ESP32 Bridge)",
+      "path": "."
+    },
+    {
+      "name": "2. ESP32 Smart Lock Firmware (PlatformIO)",
+      "path": "firmware"
+    },
+    {
+      "name": "3. Student Mobile App (Expo / React Native)",
+      "path": "mobile"
+    },
+    {
+      "name": "4. Admin Web Portal (React / Vite)",
+      "path": "web"
+    },
+    {
+      "name": "5. Admin Web Portal (Angular 22)",
+      "path": "web-angular"
+    }
+  ],
+  "settings": {
+    "files.eol": "\n",
+    "editor.tabSize": 2,
+    "platformio-ide.autoRebuildAutocompleteIndex": true
+  },
+  "extensions": {
+    "recommendations": [
+      "platformio.platformio-ide",
+      "ms-vscode.cpptools",
+      "expo.vscode-expo-tools",
+      "angular.ng-template",
+      "dbaeumer.vscode-eslint"
+    ]
+  }
+}

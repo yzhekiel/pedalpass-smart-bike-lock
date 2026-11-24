@@ -1,15 +1,16 @@
-import React, { useState } from 'react';
-import { Alert, Image, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { Animated, Easing, Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { BicycleItem, RideRecord, ScreenType, UserProfile } from '../types';
 import { colors, radius, shadow } from '../theme';
 import { Icon } from '../components/Icon';
-import { Button, Card, Divider, IconButton, KeyValue, Row, Screen, Sheet, T, Tile } from '../components/ui';
+import { Button, Card, Divider, KeyValue, RiderInfoHeader, Row, Screen, Sheet, T } from '../components/ui';
 import { isReady } from '../services/rideService';
 
 type Props = {
   user: UserProfile;
   bikes: BicycleItem[];
   rides: RideRecord[];
+  loading: boolean;
   onNavigate: (screen: ScreenType) => void;
   activeBike: BicycleItem | null;
 };
@@ -17,74 +18,34 @@ type Props = {
 // The only PedalPass station (see supabase/migrations/006_covered_court_station.sql)
 const STATION = 'Covered Court Hub';
 
-export function HomeScreen({ user, bikes, rides, onNavigate, activeBike }: Props) {
+export function HomeScreen({ user, bikes, rides, loading, onNavigate, activeBike }: Props) {
   const [receipt, setReceipt] = useState<RideRecord | null>(null);
-  const totalMin = rides.reduce((sum, r) => sum + r.durationMin, 0);
-  const usage = totalMin >= 60 ? `${Math.floor(totalMin / 60)}h ${totalMin % 60}m` : `${totalMin}m`;
-  const isFaculty = user.memberType === 'faculty';
   const ready = bikes.filter(isReady);
-  const firstName = isFaculty ? user.name.split(',')[0] : user.name.split(' ')[0];
-  const initials = user.name
-    .split(/\s+/)
-    .filter((w) => /^[A-Za-z]/.test(w) && !w.endsWith('.'))
-    .slice(0, 2)
-    .map((w) => w[0].toUpperCase())
-    .join('');
-
-  const actions: { icon: string; label: string; to: ScreenType; highlight?: boolean }[] = [
-    { icon: 'qr_code_scanner', label: 'Scan', to: 'scan', highlight: true },
-    { icon: 'map', label: 'Map', to: 'campus_map' },
-    { icon: 'pedal_bike', label: 'My rides', to: 'ride_history' },
-    { icon: 'person', label: 'Profile', to: 'profile' },
-  ];
 
   return (
     <Screen
-      header={
-        <View style={styles.header}>
-          <Row gap={12} style={{ flex: 1 }}>
-            {user.avatarUrl ? (
-              <Image source={{ uri: user.avatarUrl }} style={styles.avatar} />
-            ) : (
-              <View style={[styles.avatar, styles.avatarEmpty]}>
-                <T variant="h3" style={{ color: colors.primary }}>
-                  {initials}
-                </T>
-              </View>
-            )}
-            <View style={{ flex: 1 }}>
-              <T variant="h2">Welcome!</T>
-              <T variant="tiny" numberOfLines={1}>
-                {isFaculty ? 'Faculty & staff' : `Student${user.studentId ? ` • ${user.studentId}` : ''}`} • ready to ride, {firstName}?
-              </T>
-            </View>
-          </Row>
-          <IconButton
-            icon="notifications"
-            label="Campus alerts"
-            onPress={() => Alert.alert('Campus Alerts', 'No new emergency campus alerts at this time.')}
-          />
-        </View>
-      }
+      header={<RiderInfoHeader name={user.name} memberType={user.memberType} avatarUrl={user.avatarUrl} />}
     >
-      {/* Station status pill */}
-      <Pressable onPress={() => onNavigate('campus_map')} style={styles.pill} accessibilityRole="button" accessibilityLabel="Open campus map">
-        <Icon name="location_on" size={20} color={colors.primary} />
-        <T variant="small" style={{ flex: 1, color: colors.onSurfaceVariant }} numberOfLines={1}>
-          <T variant="small" style={{ fontWeight: '800', color: colors.onSurface }}>
-            {ready.length} {ready.length === 1 ? 'bike' : 'bikes'} ready
-          </T>{' '}
-          at {STATION}
-        </T>
-        <Icon name="chevron_right" size={20} color={colors.outline} />
-      </Pressable>
-
-      {/* Quick actions */}
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tiles} style={styles.tilesWrap}>
-        {actions.map((a) => (
-          <Tile key={a.label} icon={a.icon} label={a.label} highlight={a.highlight} onPress={() => onNavigate(a.to)} />
-        ))}
-      </ScrollView>
+      {loading ? (
+        <HomeSkeleton />
+      ) : (
+        <>
+      {/* Station availability, shown as information rather than a map link. */}
+      <View style={styles.stationCard}>
+        <View style={styles.stationIcon}>
+          <Icon name="location_on" size={23} color="#fff" />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.stationEyebrow}>BIKE STATION</Text>
+          <Text style={styles.stationName}>{STATION}</Text>
+        </View>
+        <View style={[styles.availabilityPill, ready.length === 0 && styles.availabilityPillEmpty]}>
+          <View style={[styles.availabilityDot, ready.length === 0 && styles.availabilityDotEmpty]} />
+          <Text style={[styles.availabilityText, ready.length === 0 && styles.availabilityTextEmpty]}>
+            {ready.length} ready
+          </Text>
+        </View>
+      </View>
 
       {/* Ride in progress */}
       {activeBike && (
@@ -106,18 +67,19 @@ export function HomeScreen({ user, bikes, rides, onNavigate, activeBike }: Props
 
       {/* Bikes ready to ride */}
       <Row style={{ justifyContent: 'space-between', marginTop: 4 }}>
-        <T variant="h3">Bikes ready to ride</T>
-        <Pressable onPress={() => onNavigate('campus_map')} hitSlop={8}>
-          <T variant="small" style={{ color: colors.primary, fontWeight: '800' }}>
-            See all
-          </T>
-        </Pressable>
+        <View>
+          <Text style={styles.sectionEyebrow}>AVAILABLE NOW</Text>
+          <Text style={styles.sectionTitle}>Bikes ready to ride</Text>
+        </View>
+        <View style={styles.countPill}>
+          <Text style={styles.countText}>{ready.length}</Text>
+        </View>
       </Row>
       {ready.length === 0 && (
         <Card style={{ alignItems: 'center', gap: 6, paddingVertical: 24 }}>
           <Icon name="pedal_bike" size={36} color={colors.outline} />
           <T variant="small" style={{ color: colors.onSurfaceVariant, textAlign: 'center' }}>
-            No bikes are ready right now. Check back soon or open the map.
+            No bikes are ready right now. Please check again soon.
           </T>
         </Card>
       )}
@@ -125,20 +87,8 @@ export function HomeScreen({ user, bikes, rides, onNavigate, activeBike }: Props
         <BikeCard key={b.id} bike={b} onScan={() => onNavigate('scan')} disabled={!!activeBike} />
       ))}
 
-      {/* My numbers */}
-      <Row gap={12}>
-        <Card style={styles.stat}>
-          <T variant="tiny">Rides</T>
-          <T variant="h2">{rides.length}</T>
-        </Card>
-        <Card style={styles.stat}>
-          <T variant="tiny">Ride time</T>
-          <T variant="h2">{usage}</T>
-        </Card>
-      </Row>
-
       {/* Recent rides */}
-      <Card style={{ gap: 10 }}>
+      <Card style={styles.recentCard}>
         <Row style={{ justifyContent: 'space-between' }}>
           <T variant="h3">Recent rides</T>
           <Pressable onPress={() => onNavigate('ride_history')} hitSlop={8}>
@@ -191,14 +141,69 @@ export function HomeScreen({ user, bikes, rides, onNavigate, activeBike }: Props
         )}
         <Button label="Close" onPress={() => setReceipt(null)} />
       </Sheet>
+        </>
+      )}
     </Screen>
+  );
+}
+
+function HomeSkeleton() {
+  const pulse = useRef(new Animated.Value(0.45)).current;
+
+  useEffect(() => {
+    const animation = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, {
+          toValue: 0.9,
+          duration: 650,
+          easing: Easing.inOut(Easing.quad),
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulse, {
+          toValue: 0.45,
+          duration: 650,
+          easing: Easing.inOut(Easing.quad),
+          useNativeDriver: true,
+        }),
+      ]),
+    );
+    animation.start();
+    return () => animation.stop();
+  }, [pulse]);
+
+  return (
+    <Animated.View style={[styles.skeletonWrap, { opacity: pulse }]} accessibilityLabel="Loading bike availability">
+      <View style={styles.skeletonStation}>
+        <View style={styles.skeletonIcon} />
+        <View style={styles.skeletonCopy}>
+          <View style={[styles.skeletonLine, { width: '34%' }]} />
+          <View style={[styles.skeletonLine, styles.skeletonLineStrong, { width: '68%' }]} />
+        </View>
+        <View style={styles.skeletonPill} />
+      </View>
+
+      <View style={styles.skeletonHeading}>
+        <View style={[styles.skeletonLine, { width: '28%' }]} />
+        <View style={[styles.skeletonLine, styles.skeletonLineStrong, { width: '56%' }]} />
+      </View>
+
+      <View style={styles.skeletonBikeCard}>
+        <View style={styles.skeletonBikeTop}>
+          <View style={styles.skeletonIcon} />
+          <View style={[styles.skeletonLine, styles.skeletonLineStrong, { width: '30%' }]} />
+        </View>
+        <View style={styles.skeletonBikeImage} />
+        <View style={[styles.skeletonLine, { width: '48%' }]} />
+      </View>
+
+    </Animated.View>
   );
 }
 
 /** A ready bike: who/what on top, a big picture, then where it is and the Scan button. */
 function BikeCard({ bike, onScan, disabled }: { bike: BicycleItem; onScan: () => void; disabled: boolean }) {
   return (
-    <Card style={{ gap: 12 }}>
+    <Card style={styles.bikeCard}>
       <Row style={{ justifyContent: 'space-between' }}>
         <Row gap={10}>
           <View style={styles.bikeAvatar}>
@@ -239,31 +244,33 @@ function BikeCard({ bike, onScan, disabled }: { bike: BicycleItem; onScan: () =>
 }
 
 const styles = StyleSheet.create({
-  header: {
+  stationCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 10,
-    paddingHorizontal: 16,
-    paddingTop: 8,
-    paddingBottom: 6,
-    backgroundColor: colors.surface,
-  },
-  avatar: { width: 52, height: 52, borderRadius: radius.md, backgroundColor: colors.secondaryContainer },
-  avatarEmpty: { alignItems: 'center', justifyContent: 'center' },
-  pill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    borderRadius: radius.full,
-    backgroundColor: colors.surfaceContainerLowest,
+    gap: 14,
+    marginTop: -18,
+    marginHorizontal: 2,
+    padding: 18,
+    borderRadius: radius.lg,
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: colors.outlineVariant,
     ...shadow,
   },
-  tilesWrap: { marginHorizontal: -16 },
-  tiles: { gap: 12, paddingHorizontal: 16, paddingVertical: 6 },
-  riding: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: colors.primaryFill },
+  stationIcon: { width: 44, height: 44, borderRadius: 15, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.primaryFill },
+  stationEyebrow: { color: colors.onSurfaceVariant, fontSize: 9, fontWeight: '900', letterSpacing: 0.9 },
+  stationName: { color: colors.onSurface, fontSize: 14, fontWeight: '900', marginTop: 2 },
+  availabilityPill: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 9, paddingVertical: 6, borderRadius: radius.full, backgroundColor: colors.successContainer },
+  availabilityPillEmpty: { backgroundColor: colors.surfaceContainer },
+  availabilityDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: colors.success },
+  availabilityDotEmpty: { backgroundColor: colors.outline },
+  availabilityText: { color: colors.success, fontSize: 10, fontWeight: '900' },
+  availabilityTextEmpty: { color: colors.onSurfaceVariant },
+  sectionEyebrow: { color: colors.primary, fontSize: 10, fontWeight: '900', letterSpacing: 0.9 },
+  sectionTitle: { color: colors.onSurface, fontSize: 17, fontWeight: '900', letterSpacing: -0.3, marginTop: 2 },
+  countPill: { minWidth: 34, height: 34, paddingHorizontal: 10, borderRadius: 17, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.secondaryContainer },
+  countText: { color: colors.primary, fontSize: 13, fontWeight: '900' },
+  riding: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 20, backgroundColor: colors.primaryFill },
   ridingIcon: { width: 44, height: 44, borderRadius: radius.md, backgroundColor: colors.gold, alignItems: 'center', justifyContent: 'center' },
   bikeAvatar: { width: 42, height: 42, borderRadius: 21, backgroundColor: colors.secondaryContainer, alignItems: 'center', justifyContent: 'center' },
   valuePill: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: radius.full, backgroundColor: colors.surfaceContainer },
@@ -275,7 +282,30 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     overflow: 'hidden',
   },
-  stat: { flex: 1, gap: 2 },
+  bikeCard: { gap: 16, borderWidth: 1, borderColor: colors.outlineVariant },
+  recentCard: { gap: 16, borderWidth: 1, borderColor: colors.outlineVariant },
+  skeletonWrap: { gap: 20 },
+  skeletonStation: {
+    minHeight: 72,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    marginTop: -18,
+    padding: 18,
+    borderRadius: radius.lg,
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: colors.outlineVariant,
+  },
+  skeletonIcon: { width: 44, height: 44, borderRadius: 15, backgroundColor: colors.surfaceContainerHigh },
+  skeletonCopy: { flex: 1, gap: 8 },
+  skeletonLine: { height: 9, borderRadius: radius.full, backgroundColor: colors.surfaceContainerHigh },
+  skeletonLineStrong: { height: 13 },
+  skeletonPill: { width: 62, height: 28, borderRadius: radius.full, backgroundColor: colors.surfaceContainerHigh },
+  skeletonHeading: { gap: 8, marginTop: 4 },
+  skeletonBikeCard: { gap: 16, padding: 18, borderRadius: radius.lg, backgroundColor: '#fff', borderWidth: 1, borderColor: colors.outlineVariant },
+  skeletonBikeTop: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  skeletonBikeImage: { height: 150, borderRadius: radius.md, backgroundColor: colors.surfaceContainerHigh },
   rideRow: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 10, borderRadius: radius.md, backgroundColor: colors.surfaceContainerLow },
   bikeTag: { width: 56, height: 36, borderRadius: radius.sm, backgroundColor: colors.gold, alignItems: 'center', justifyContent: 'center' },
 });

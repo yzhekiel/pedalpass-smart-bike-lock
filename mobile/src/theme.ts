@@ -47,9 +47,9 @@ export const colors = {
 export const radius = { sm: 10, md: 16, lg: 24, xl: 28, full: 999 };
 
 export const shadow = {
-  shadowColor: '#1a1f36',
-  shadowOpacity: 0.07,
-  shadowRadius: 16,
-  shadowOffset: { width: 0, height: 6 },
-  elevation: 2,
+  shadowColor: '#17234d',
+  shadowOpacity: 0.08,
+  shadowRadius: 20,
+  shadowOffset: { width: 0, height: 8 },
+  elevation: 3,
 };

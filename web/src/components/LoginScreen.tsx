@@ -1,21 +1,23 @@
 import React, { useState } from 'react';
 import { PedalPassLogo } from './PedalPassLogo';
+import './LoginScreen.css';
 import { isSupabaseConfigured } from '../lib/supabase';
 import { StaffProfile, StaffRole, staffSignIn } from '../lib/auth';
 
 interface LoginScreenProps {
   onLogin: (role: StaffRole, profile: StaffProfile) => void;
+  onBack: () => void;
 }
 
-export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
+export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, onBack }) => {
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [signingIn, setSigningIn] = useState(false);
 
-  const handleSignIn = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSignIn = async (event: React.FormEvent) => {
+    event.preventDefault();
     if (!isSupabaseConfigured) {
       setError('Not connected. Fill in web/.env with your Supabase keys and restart npm run dev.');
       return;
@@ -28,139 +30,112 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
       setError('Enter your password.');
       return;
     }
+
     setSigningIn(true);
     setError('');
     try {
-      // The role comes from the database, not from the selected tab
       const profile = await staffSignIn(identifier, password);
       onLogin(profile.role, profile);
-    } catch (err) {
-      setError((err as Error).message);
+    } catch (signInError) {
+      setError((signInError as Error).message);
       setSigningIn(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-background flex">
-      {/* Brand panel (desktop) */}
-      <aside className="hidden lg:flex w-[44%] bg-gradient-to-br from-primary to-[#051648] text-on-primary flex-col justify-between p-10">
-        <div className="flex items-center gap-3">
-          <PedalPassLogo size={56} />
-          <div>
-            <p className="text-xl font-extrabold">PedalPass</p>
-            <p className="text-xs text-on-primary-container">Admin Portal</p>
-          </div>
-        </div>
-        <div className="space-y-4 max-w-md">
-          <h2 className="text-3xl font-extrabold leading-tight">
-            Monitor campus bicycles, smart locks and rides in one place.
-          </h2>
-          <ul className="space-y-2 text-sm text-on-primary-container">
-            {[
-              ['monitoring', 'Live fleet status and active rides'],
-              ['notifications_active', 'Tamper, low-battery and late-return alerts'],
-              ['build', 'Issue reports and the bike maintenance list'],
-              ['assessment', 'Usage reports for administrators'],
-            ].map(([icon, text]) => (
-              <li key={text} className="flex items-center gap-2">
-                <span className="material-symbols-outlined text-primary-fixed text-[20px]">{icon}</span>
-                {text}
-              </li>
-            ))}
-          </ul>
-        </div>
-        <p className="text-xs text-on-primary-container">Dr. Yanga's Colleges, Inc. • Bocaue, Bulacan</p>
-      </aside>
+    <main className="account-login">
+      <div className="account-login__glow account-login__glow--blue" />
+      <div className="account-login__glow account-login__glow--gold" />
 
-      {/* Sign-in form */}
-      <main className="flex-1 flex items-center justify-center p-6">
-        <div className="w-full max-w-md">
-          <div className="text-center mb-6 lg:hidden">
-            <div className="inline-flex mb-2">
-              <PedalPassLogo size={80} />
+      <section className="account-login__shell" aria-label="PedalPass administrator sign in">
+        <div className="account-login__form-panel">
+          <header className="account-login__brand">
+            <div className="account-login__brand-lockup">
+              <span className="account-login__logo"><PedalPassLogo size={34} showOuterCard={false} /></span>
+              <span><strong>PedalPass</strong><small>Admin Portal</small></span>
             </div>
-            <h1 className="text-2xl font-extrabold text-primary-light">PedalPass</h1>
-            <p className="text-sm text-on-surface-variant">Admin Portal</p>
-          </div>
+            <button type="button" className="account-login__back" onClick={onBack}>
+              <span className="material-symbols-outlined">home</span>
+              Website
+            </button>
+          </header>
 
-          <div className="bg-surface-container-lowest rounded-2xl p-6 border border-outline-variant/50 shadow-sm">
-            <h2 className="text-lg font-extrabold text-on-surface">Admin Sign In</h2>
-            <p className="text-xs text-on-surface-variant mb-4">
-              For PedalPass admins only. Students and faculty use the PedalPass mobile app.
-            </p>
+          <div className="account-login__form-wrap">
+            <div className="account-login__eyebrow">
+              <span className="material-symbols-outlined">admin_panel_settings</span>
+              Administrator access
+            </div>
+            <h1>Sign in to your account</h1>
+            <p className="account-login__intro">Manage campus bicycles, rider safety, maintenance, and reports.</p>
 
-            <form className="space-y-4" onSubmit={handleSignIn}>
-              <div>
-                <label className="block text-xs font-bold text-on-surface mb-1.5" htmlFor="identifier">
-                  Staff Email
-                </label>
-                <div className="relative">
-                  <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-secondary text-[20px]">
-                    badge
-                  </span>
+            <form className="account-login__form" onSubmit={handleSignIn}>
+              <div className="account-login__field">
+                <label htmlFor="identifier">Admin email</label>
+                <div className="account-login__input-wrap">
+                  <span className="material-symbols-outlined" aria-hidden="true">alternate_email</span>
                   <input
                     id="identifier"
                     value={identifier}
-                    onChange={(e) => setIdentifier(e.target.value)}
-                    className="block w-full pl-10 pr-3 py-3 bg-surface text-on-surface text-sm rounded-xl border border-outline-variant focus:outline-none focus:ring-2 focus:ring-primary-light"
+                    onChange={(event) => setIdentifier(event.target.value)}
                     type="email"
                     autoComplete="username"
+                    placeholder="admin@dyci.edu.ph"
                   />
                 </div>
               </div>
 
-              <div>
-                <label className="block text-xs font-bold text-on-surface mb-1.5" htmlFor="password">
-                  Password
-                </label>
-                <div className="relative">
-                  <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-secondary text-[20px]">
-                    lock
-                  </span>
+              <div className="account-login__field">
+                <label htmlFor="password">Password</label>
+                <div className="account-login__input-wrap">
+                  <span className="material-symbols-outlined" aria-hidden="true">lock</span>
                   <input
                     id="password"
                     value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    className="block w-full pl-10 pr-10 py-3 bg-surface text-on-surface text-sm rounded-xl border border-outline-variant focus:outline-none focus:ring-2 focus:ring-primary-light"
+                    onChange={(event) => setPassword(event.target.value)}
                     type={showPassword ? 'text' : 'password'}
                     autoComplete="current-password"
+                    placeholder="Enter your password"
                   />
                   <button
                     type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    aria-label="Toggle password visibility"
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-secondary hover:text-on-surface"
+                    onClick={() => setShowPassword((visible) => !visible)}
+                    aria-label={showPassword ? 'Hide password' : 'Show password'}
+                    className="account-login__visibility"
                   >
-                    <span className="material-symbols-outlined text-[20px]">
-                      {showPassword ? 'visibility_off' : 'visibility'}
-                    </span>
+                    <span className="material-symbols-outlined">{showPassword ? 'visibility_off' : 'visibility'}</span>
                   </button>
                 </div>
               </div>
 
               {error && (
-                <p className="text-xs font-bold text-error flex items-center gap-1">
-                  <span className="material-symbols-outlined text-[16px]">error</span>
-                  {error}
-                </p>
+                <div role="alert" className="account-login__error">
+                  <span className="material-symbols-outlined">error</span>
+                  <span>{error}</span>
+                </div>
               )}
 
-              <button
-                type="submit"
-                disabled={signingIn}
-                className="w-full h-12 bg-primary text-on-primary rounded-xl font-bold text-sm flex items-center justify-center gap-2 hover:bg-primary-container active:scale-[0.98] transition-all shadow-md shadow-primary/20 disabled:opacity-70"
-              >
-                {signingIn ? 'Signing in…' : 'Sign In'}
-                <span className="material-symbols-outlined text-[20px]">arrow_forward</span>
+              <button type="submit" disabled={signingIn} className="account-login__submit">
+                <span className={`material-symbols-outlined ${signingIn ? 'account-login__spinner' : ''}`}>
+                  {signingIn ? 'progress_activity' : 'login'}
+                </span>
+                {signingIn ? 'Signing in…' : 'Sign in'}
               </button>
             </form>
-          </div>
 
-          <p className="text-center text-[11px] text-outline mt-4">
-            Accounts for staff are created by campus IT. Emergency: Campus Security Local 104.
-          </p>
+          </div>
         </div>
-      </main>
-    </div>
+
+        <aside className="account-login__mascot-panel">
+          <div className="account-login__grid" />
+          <div className="account-login__mascot-copy">
+            <span className="account-login__status"><i /> Campus mobility operations</span>
+            <h2>Keep every campus ride moving.</h2>
+            <p>One secure workspace for the entire PedalPass bicycle network.</p>
+          </div>
+          <div className="account-login__mascot-halo" />
+          <img src="/images/pedalpass-app-mascot.png" alt="PedalPass campus rider mascot" className="account-login__mascot" />
+        </aside>
+      </section>
+    </main>
   );
 };

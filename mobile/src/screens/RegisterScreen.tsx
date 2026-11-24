@@ -1,10 +1,11 @@
-import React, { useMemo, useState } from 'react';
-import { Alert, Image, Pressable, StyleSheet, View } from 'react-native';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { Alert, Animated, Easing, Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
+import { StatusBar } from 'expo-status-bar';
 import { ScreenType, UserProfile } from '../types';
 import { colors, radius } from '../theme';
 import { Icon } from '../components/Icon';
-import { Badge, Button, Card, Chip, Field, Header, Row, Screen, SectionTitle, T } from '../components/ui';
+import { Badge, Button, Card, Chip, Field, HeaderMascot, NotificationButton, Row, Screen, SectionTitle, T } from '../components/ui';
 import { IdentityDocs, signUp, submitIdentity } from '../services/authService';
 import { scanCor } from '../services/corService';
 import { FaceCheckCard, Photo, PhotoCard, useFaceCheck } from '../components/IdentityPhotos';
@@ -36,6 +37,11 @@ export function RegisterScreen({ onNavigate, onSignedIn, onNeedsVerification }: 
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const headerOpacity = useRef(new Animated.Value(0)).current;
+  const headerY = useRef(new Animated.Value(-20)).current;
+  const contentOpacity = useRef(new Animated.Value(0)).current;
+  const contentY = useRef(new Animated.Value(24)).current;
+  const progressAnimation = useRef(new Animated.Value(0)).current;
 
   // Scan COR: only a scan can set "enrolled"
   const [preview, setPreview] = useState<string | null>(null);
@@ -51,6 +57,21 @@ export function RegisterScreen({ onNavigate, onSignedIn, onNeedsVerification }: 
   const [consent, setConsent] = useState(false);
   const face = useFaceCheck(idPhoto, selfie);
   const isStudent = memberType === 'student';
+
+  useEffect(() => {
+    const entrance = Animated.sequence([
+      Animated.parallel([
+        Animated.timing(headerOpacity, { toValue: 1, duration: 280, easing: Easing.out(Easing.quad), useNativeDriver: true }),
+        Animated.spring(headerY, { toValue: 0, damping: 15, stiffness: 125, useNativeDriver: true }),
+      ]),
+      Animated.parallel([
+        Animated.timing(contentOpacity, { toValue: 1, duration: 360, easing: Easing.out(Easing.quad), useNativeDriver: true }),
+        Animated.timing(contentY, { toValue: 0, duration: 440, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
+      ]),
+    ]);
+    entrance.start();
+    return () => entrance.stop();
+  }, [contentOpacity, contentY, headerOpacity, headerY]);
 
   const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
   const checks = useMemo(
@@ -220,42 +241,84 @@ export function RegisterScreen({ onNavigate, onSignedIn, onNeedsVerification }: 
     : [emailValid, !!fullName.trim() && !!studentId.trim(), !!idPhoto, consent, strength >= 4 && matches];
   const progress = Math.round((requirements.filter(Boolean).length / requirements.length) * 100);
 
+  useEffect(() => {
+    Animated.timing(progressAnimation, {
+      toValue: progress,
+      duration: 420,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: false,
+    }).start();
+  }, [progress, progressAnimation]);
+
   return (
     <Screen
       bottomPad={40}
       header={
-        <Header
-          title="Create Account"
-          subtitle="Account & Identity"
-          onBack={() => onNavigate('login')}
-        />
+        <Animated.View style={[styles.hero, { opacity: headerOpacity, transform: [{ translateY: headerY }] }]}>
+          <StatusBar style="light" />
+          <Pressable onPress={() => onNavigate('login')} style={styles.backButton} hitSlop={8} accessibilityLabel="Go back">
+            <Icon name="arrow_back" size={22} color="#fff" />
+          </Pressable>
+          <View style={styles.heroCopy}>
+            <Text style={styles.heroEyebrow}>PEDALPASS MEMBERSHIP</Text>
+            <Text style={styles.heroTitle}>Create your account</Text>
+            <Text style={styles.heroSubtitle}>Register once, verify your identity, and start riding on campus.</Text>
+          </View>
+          <View style={styles.heroActions}>
+            <HeaderMascot size={42} />
+            <NotificationButton compact />
+          </View>
+          <View style={styles.heroAccent} />
+        </Animated.View>
       }
     >
-      {face.element}
+      <Animated.View style={[styles.content, { opacity: contentOpacity, transform: [{ translateY: contentY }] }]}>
+        {face.element}
 
-      <Card style={{ backgroundColor: colors.surfaceContainerLow, gap: 8 }}>
+      <Card style={styles.progressCard}>
         <Row style={{ justifyContent: 'space-between' }}>
-          <Row gap={6}>
-            <Icon name="verified_user" size={20} color={colors.primary} />
-            <T variant="h3">Step 1 of 2 · Requirements</T>
-          </Row>
-          <T variant="small" style={{ fontWeight: '800', color: progress === 100 ? colors.success : colors.primary }}>
-            {progress}%
-          </T>
+          <View>
+            <T variant="tiny" style={styles.progressEyebrow}>YOUR PROGRESS</T>
+            <T variant="h3">Complete your requirements</T>
+          </View>
+          <View style={styles.progressPill}>
+            <T variant="small" style={{ fontWeight: '900', color: progress === 100 ? colors.success : colors.primary }}>
+              {progress}%
+            </T>
+          </View>
         </Row>
+        <View style={styles.stepRow}>
+          <View style={styles.stepItem}>
+            <View style={[styles.stepDot, styles.stepDotActive]}><Text style={styles.stepNumberActive}>1</Text></View>
+            <Text style={styles.stepLabelActive}>Account details</Text>
+          </View>
+          <View style={styles.stepLine} />
+          <View style={styles.stepItem}>
+            <View style={styles.stepDot}><Text style={styles.stepNumber}>2</Text></View>
+            <Text style={styles.stepLabel}>Email verification</Text>
+          </View>
+        </View>
         <View style={styles.track}>
-          <View style={[styles.fill, { width: `${progress}%`, backgroundColor: progress === 100 ? colors.success : colors.primary }]} />
+          <Animated.View
+            style={[
+              styles.fill,
+              {
+                width: progressAnimation.interpolate({ inputRange: [0, 100], outputRange: ['0%', '100%'] }),
+                backgroundColor: progress === 100 ? colors.success : colors.primary,
+              },
+            ]}
+          />
         </View>
         <T variant="tiny">
           {isStudent
-            ? 'Fill in your details and add your COR, school ID and a selfie.'
-            : 'Fill in your details and add a photo of your faculty / staff ID.'}{' '}
-          Step 2 is the code we email you — then your account goes to a PedalPass admin for approval.
+            ? 'Add your school details, COR, school ID, and selfie.'
+            : 'Add your school details and faculty or staff ID.'}{' '}
+          We will email your verification code in step 2.
         </T>
       </Card>
 
       {memberType === 'student' && (
-        <Card style={{ gap: 10 }}>
+        <Card style={{ gap: 14 }}>
           <SectionTitle icon="document_scanner">Scan COR</SectionTitle>
           <T variant="tiny">
             Take a clear photo of your Certificate of Registration. We read it to fill in your details below, and the
@@ -291,7 +354,7 @@ export function RegisterScreen({ onNavigate, onSignedIn, onNeedsVerification }: 
         </Card>
       )}
 
-      <Card style={{ gap: 14 }}>
+      <Card style={{ gap: 18 }}>
         <Field
           label="Email Address *"
           icon="mail"
@@ -337,7 +400,7 @@ export function RegisterScreen({ onNavigate, onSignedIn, onNeedsVerification }: 
         </View>
       </Card>
 
-      <Card style={{ gap: 12 }}>
+      <Card style={{ gap: 16 }}>
         <SectionTitle icon="assignment_ind">Academic Information</SectionTitle>
         {memberType === 'faculty' && (
           <Field label="Full Name" icon="person" value={fullName} onChangeText={setFullName} autoCapitalize="words" />
@@ -457,7 +520,7 @@ export function RegisterScreen({ onNavigate, onSignedIn, onNeedsVerification }: 
       )}
 
       <Pressable onPress={() => setConsent(!consent)}>
-        <Card style={{ flexDirection: 'row', gap: 10 }}>
+        <Card style={{ flexDirection: 'row', gap: 14 }}>
           <Icon
             name={consent ? 'check_box' : 'check_box_outline_blank'}
             size={22}
@@ -471,7 +534,7 @@ export function RegisterScreen({ onNavigate, onSignedIn, onNeedsVerification }: 
         </Card>
       </Pressable>
 
-      <Card style={{ gap: 12 }}>
+      <Card style={{ gap: 16 }}>
         <SectionTitle icon="key">Security Credentials</SectionTitle>
         <Field label="Account Password *" icon="lock" value={password} onChangeText={setPassword} secure />
         <Field
@@ -520,7 +583,7 @@ export function RegisterScreen({ onNavigate, onSignedIn, onNeedsVerification }: 
         </View>
       </Card>
 
-      <Card style={{ flexDirection: 'row', gap: 10, backgroundColor: colors.secondaryContainer }}>
+      <Card style={{ flexDirection: 'row', gap: 14, backgroundColor: colors.secondaryContainer }}>
         <Icon name="mark_email_read" size={22} color={colors.primary} />
         <View style={{ flex: 1 }}>
           <T variant="h3">Step 2 · Email Verification</T>
@@ -545,11 +608,78 @@ export function RegisterScreen({ onNavigate, onSignedIn, onNeedsVerification }: 
           </T>
         </T>
       </Pressable>
+      </Animated.View>
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
+  hero: {
+    height: 108,
+    overflow: 'hidden',
+    backgroundColor: colors.primaryFill,
+    paddingHorizontal: 18,
+    paddingTop: 8,
+    paddingBottom: 8,
+    borderBottomLeftRadius: 24,
+    borderBottomRightRadius: 24,
+  },
+  backButton: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.13)',
+  },
+  heroCopy: { position: 'absolute', left: 62, right: 98, top: 18 },
+  heroEyebrow: { color: colors.gold, fontSize: 10, fontWeight: '900', letterSpacing: 1.2 },
+  heroTitle: { color: '#fff', fontSize: 18, fontWeight: '900', letterSpacing: -0.4, marginTop: 2 },
+  heroSubtitle: { color: 'rgba(255,255,255,0.76)', fontSize: 10, lineHeight: 13, fontWeight: '600', marginTop: 3 },
+  heroActions: {
+    position: 'absolute',
+    right: 8,
+    top: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+  },
+  heroAccent: {
+    position: 'absolute',
+    right: -24,
+    bottom: -44,
+    width: 140,
+    height: 140,
+    borderRadius: 70,
+    backgroundColor: 'rgba(245,184,46,0.12)',
+  },
+  content: { gap: 20 },
+  progressCard: { gap: 16, marginTop: -4, borderWidth: 1, borderColor: colors.outlineVariant },
+  progressEyebrow: { color: colors.primary, fontWeight: '900', letterSpacing: 0.8, marginBottom: 2 },
+  progressPill: {
+    minWidth: 52,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: radius.full,
+    alignItems: 'center',
+    backgroundColor: colors.secondaryContainer,
+  },
+  stepRow: { flexDirection: 'row', alignItems: 'center' },
+  stepItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  stepDot: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.surfaceContainer,
+  },
+  stepDotActive: { backgroundColor: colors.primaryFill },
+  stepNumber: { color: colors.onSurfaceVariant, fontSize: 11, fontWeight: '900' },
+  stepNumberActive: { color: '#fff', fontSize: 11, fontWeight: '900' },
+  stepLabel: { color: colors.onSurfaceVariant, fontSize: 10, fontWeight: '700' },
+  stepLabelActive: { color: colors.onSurface, fontSize: 10, fontWeight: '900' },
+  stepLine: { flex: 1, height: 1, marginHorizontal: 8, backgroundColor: colors.outlineVariant },
   roleBtn: {
     flex: 1,
     flexDirection: 'row',

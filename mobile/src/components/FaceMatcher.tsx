@@ -9,7 +9,7 @@
  * every account in the web portal, because a check on the phone alone could be tampered with.
  */
 import React, { useCallback, useRef } from 'react';
-import { StyleSheet } from 'react-native';
+import { Platform, StyleSheet } from 'react-native';
 import { WebView, WebViewMessageEvent } from 'react-native-webview';
 
 /** Same scale as web/src/lib/identityCheck.ts: 46% or higher is green and may go on to step 2. */
@@ -118,6 +118,58 @@ export function useFaceMatcher() {
   const compare = useCallback(
     (idBase64: string, selfieBase64: string) =>
       new Promise<FaceMatch>((resolve, reject) => {
+        if (Platform.OS === 'web') {
+          (async () => {
+            try {
+              const mod: any = await new Function('u', 'return import(u)')(`${HUMAN}/dist/human.esm.js`);
+              const Human = mod.Human || mod.default;
+              const human = new Human({
+                modelBasePath: `${HUMAN}/models/`,
+                face: {
+                  enabled: true,
+                  detector: { rotation: true, maxDetected: 3, minConfidence: 0.3 },
+                  mesh: { enabled: true },
+                  description: { enabled: true },
+                  iris: { enabled: false },
+                  attention: { enabled: false },
+                  emotion: { enabled: false },
+                  antispoof: { enabled: false },
+                  liveness: { enabled: false },
+                },
+                body: { enabled: false },
+                hand: { enabled: false },
+                object: { enabled: false },
+                gesture: { enabled: false },
+                filter: { enabled: false },
+              });
+              await human.load();
+              const loadImg = (b64: string) =>
+                new Promise<HTMLImageElement>((res, rej) => {
+                  const img = new window.Image();
+                  img.onload = () => res(img);
+                  img.onerror = () => rej(new Error('Could not read the photo'));
+                  img.src = 'data:image/jpeg;base64,' + b64;
+                });
+              const embed = async (b64: string) => {
+                const det = await human.detect(await loadImg(b64));
+                const faces = (det.face || []).filter((f: any) => f.embedding && f.embedding.length);
+                if (!faces.length) return null;
+                faces.sort((a: any, b: any) => b.box[2] * b.box[3] - a.box[2] * a.box[3]);
+                return faces[0].embedding;
+              };
+              const idFace = await embed(idBase64);
+              const selfieFace = await embed(selfieBase64);
+              resolve({
+                idFace: !!idFace,
+                selfieFace: !!selfieFace,
+                similarity: idFace && selfieFace ? human.match.similarity(idFace, selfieFace) : null,
+              });
+            } catch (err) {
+              reject(err instanceof Error ? err : new Error(String(err)));
+            }
+          })();
+          return;
+        }
         const requestId = nextId.current++;
         pending.current.set(requestId, { resolve, reject });
         const msg = JSON.stringify({ type: 'compare', requestId, id: idBase64, selfie: selfieBase64 });
@@ -131,15 +183,16 @@ export function useFaceMatcher() {
     [],
   );
 
-  const element = (
-    <WebView<object>
-      ref={web}
-      source={{ html: HTML, baseUrl: 'https://localhost' }}
-      originWhitelist={['*']}
-      onMessage={onMessage}
-      style={styles.hidden}
-    />
-  );
+  const element =
+    Platform.OS === 'web' ? null : (
+      <WebView<object>
+        ref={web}
+        source={{ html: HTML, baseUrl: 'https://localhost' }}
+        originWhitelist={['*']}
+        onMessage={onMessage}
+        style={styles.hidden}
+      />
+    );
 
   return { element, compare };
 }

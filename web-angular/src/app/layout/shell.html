@@ -1,0 +1,55 @@
+<div class="layout">
+  <!-- Sidebar (slides in on small screens) -->
+  <aside class="sidebar" [class.open]="menuOpen()">
+    <a routerLink="/dashboard" class="brand" (click)="menuOpen.set(false)">
+      <img src="pedalpass-icon.svg" alt="" width="34" height="34" />
+      <span>PedalPass</span>
+    </a>
+    <nav>
+      @for (item of nav; track item.path) {
+        <a
+          [routerLink]="item.path"
+          routerLinkActive="active"
+          class="nav-link"
+          (click)="menuOpen.set(false)"
+        >
+          <span class="icon">{{ item.icon }}</span>
+          {{ item.label }}
+        </a>
+      }
+    </nav>
+  </aside>
+  @if (menuOpen()) {
+    <div class="scrim" (click)="menuOpen.set(false)"></div>
+  }
+
+  <div class="main">
+    <header class="topbar">
+      <button class="btn ghost menu-btn" (click)="menuOpen.set(true)" aria-label="Open menu">
+        <span class="icon">menu</span>
+      </button>
+      <h1 class="grow">{{ title() }}</h1>
+
+      <div class="account">
+        <button class="account-btn" (click)="accountOpen.set(!accountOpen())" aria-label="Account">
+          <span class="avatar">{{ initial() }}</span>
+          <span class="who">
+            <strong>{{ profile()?.name }}</strong>
+            <small>Admin</small>
+          </span>
+          <span class="icon">expand_more</span>
+        </button>
+        @if (accountOpen()) {
+          <div class="account-menu">
+            <p class="small muted">{{ profile()?.email }}</p>
+            <button class="btn ghost" (click)="signOut()"><span class="icon">logout</span> Sign out</button>
+          </div>
+        }
+      </div>
+    </header>
+
+    <main>
+      <router-outlet />
+    </main>
+  </div>
+</div>

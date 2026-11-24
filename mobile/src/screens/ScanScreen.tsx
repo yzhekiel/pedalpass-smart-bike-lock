@@ -1,10 +1,11 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Image, Pressable, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Alert, Image, Platform, Pressable, StyleSheet, View } from 'react-native';
 import { BarcodeScanningResult, CameraView, useCameraPermissions } from 'expo-camera';
+import jsQR from 'jsqr';
 import { BicycleItem, ScreenType, UserProfile } from '../types';
-import { colors, radius } from '../theme';
+import { colors, radius, shadow } from '../theme';
 import { Icon } from '../components/Icon';
-import { Badge, Button, Card, Header, Row, Screen, T } from '../components/ui';
+import { Badge, Button, Card, Field, Header, Row, Screen, T } from '../components/ui';
 import { parseBikeQr, unlockBike } from '../services/lockService';
 import {
   cancelRide,
@@ -68,11 +69,91 @@ function accessChecks(user: UserProfile, bike: BicycleItem, hasActiveRide: boole
   ];
 }
 
+/** Live HTML5 webcam QR scanner for Web browsers (where expo-camera onBarcodeScanned is unsupported). */
+function WebCameraQrView({ onDetect }: { onDetect: (text: string) => void }) {
+  const videoRef = useRef<any>(null);
+  const [camError, setCamError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof navigator === 'undefined') return;
+    let stream: MediaStream | null = null;
+    let timer: any = null;
+    let cancelled = false;
+
+    const startWebcam = async () => {
+      try {
+        if (!navigator.mediaDevices?.getUserMedia) {
+          setCamError('Webcam API not available in this browser tab. Use Upload QR Image or Paste QR Text below.');
+          return;
+        }
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+        } catch {
+          stream = await navigator.mediaDevices.getUserMedia({ video: true });
+        }
+        if (cancelled) {
+          stream.getTracks().forEach((t) => t.stop());
+          return;
+        }
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          videoRef.current.setAttribute('playsinline', 'true');
+          await videoRef.current.play().catch(() => {});
+        }
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d', { willReadFrequently: true });
+        timer = setInterval(() => {
+          const vid = videoRef.current;
+          if (!vid || vid.readyState < 2 || !ctx) return;
+          const w = vid.videoWidth || 640;
+          const h = vid.videoHeight || 480;
+          canvas.width = w;
+          canvas.height = h;
+          ctx.drawImage(vid, 0, 0, w, h);
+          const imgData = ctx.getImageData(0, 0, w, h);
+          const hit = jsQR(imgData.data, w, h);
+          if (hit && hit.data) {
+            onDetect(hit.data);
+          }
+        }, 220);
+      } catch (err: any) {
+        setCamError(err?.message || 'Camera permission denied or no webcam found. Use Upload QR Image below.');
+      }
+    };
+
+    startWebcam();
+    return () => {
+      cancelled = true;
+      if (timer) clearInterval(timer);
+      if (stream) stream.getTracks().forEach((t) => t.stop());
+    };
+  }, [onDetect]);
+
+  if (camError) {
+    return (
+      <View style={{ alignItems: 'center', gap: 10, padding: 20 }}>
+        <Icon name="qr_code_scanner" size={40} color="#fff" />
+        <T variant="small" style={{ color: '#fff', textAlign: 'center' }}>
+          {camError}
+        </T>
+      </View>
+    );
+  }
+
+  return React.createElement('video', {
+    ref: videoRef,
+    muted: true,
+    playsInline: true,
+    style: { width: '100%', height: '100%', objectFit: 'cover', position: 'absolute', top: 0, left: 0 },
+  });
+}
+
 export function ScanScreen({ user, bikes, hasActiveRide, onNavigate, onStartRide, onBikesChanged, swap, onSwapAborted }: Props) {
   const [permission, requestPermission] = useCameraPermissions();
   const [torch, setTorch] = useState(false);
   const [bike, setBike] = useState<BicycleItem | null>(null);
   const [qrCode, setQrCode] = useState(''); // secret part of the scanned QR, checked by start_ride
+  const [manualQrInput, setManualQrInput] = useState('');
   const [looking, setLooking] = useState(false);
   const [countdown, setCountdown] = useState(45);
   const [unlocking, setUnlocking] = useState(false);
@@ -149,18 +230,56 @@ export function ScanScreen({ user, bikes, hasActiveRide, onNavigate, onStartRide
     setBike(found);
   };
 
-  const onScanned = (result: BarcodeScanningResult) => {
-    if (scanLock.current || bike || looking) return;
+  const handleQrString = (rawText: string) => {
+    const trimmed = rawText.trim();
+    if (!trimmed || scanLock.current || bike || looking) return;
     scanLock.current = true;
-    const qr = parseBikeQr(result.data);
+    const qr = parseBikeQr(trimmed);
     if (qr && !qr.code) {
-      Alert.alert('Old QR code', `This QR code on ${qr.bikeId} no longer works. Please tell an admin so they can print a new one.`, [
+      Alert.alert('Old QR code', `This QR code on ${qr.bikeId} no longer works. Please print or download the current QR code from the Admin Portal -> QR Codes page.`, [
         { text: 'OK', onPress: () => (scanLock.current = false) },
       ]);
       return;
     }
     setQrCode(qr?.code ?? '');
-    selectBikeById(qr?.bikeId ?? null, result.data);
+    selectBikeById(qr?.bikeId ?? null, trimmed);
+  };
+
+  const onScanned = (result: BarcodeScanningResult) => {
+    handleQrString(result.data);
+  };
+
+  const uploadQrImageOnWeb = () => {
+    if (Platform.OS !== 'web' || typeof document === 'undefined') return;
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    input.onchange = () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        const img = new window.Image();
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          canvas.width = img.width;
+          canvas.height = img.height;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) return;
+          ctx.drawImage(img, 0, 0);
+          const imageData = ctx.getImageData(0, 0, img.width, img.height);
+          const decoded = jsQR(imageData.data, img.width, img.height);
+          if (decoded && decoded.data) {
+            handleQrString(decoded.data);
+          } else {
+            Alert.alert('No QR Code Detected', 'Could not read a QR code from that image. Please choose a clear QR code PNG downloaded from the Admin Portal (QR Codes page).');
+          }
+        };
+        img.src = String(reader.result);
+      };
+      reader.readAsDataURL(file);
+    };
+    input.click();
   };
 
   /** Checklist done: unlock (reporting any problems once riding), or report and pick another bike. */
@@ -248,50 +367,128 @@ export function ScanScreen({ user, bikes, hasActiveRide, onNavigate, onStartRide
       {!bike ? (
         <>
           {/* Camera */}
-          <View style={styles.cameraBox}>
-            {!permission ? (
-              <ActivityIndicator color="#fff" />
-            ) : permission.granted ? (
-              <>
-                <CameraView
-                  style={StyleSheet.absoluteFill}
-                  facing="back"
-                  enableTorch={torch}
-                  barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
-                  onBarcodeScanned={onScanned}
-                />
-                <View style={styles.frame} pointerEvents="none">
-                  <View style={[styles.corner, { top: 0, left: 0, borderTopWidth: 4, borderLeftWidth: 4 }]} />
-                  <View style={[styles.corner, { top: 0, right: 0, borderTopWidth: 4, borderRightWidth: 4 }]} />
-                  <View style={[styles.corner, { bottom: 0, left: 0, borderBottomWidth: 4, borderLeftWidth: 4 }]} />
-                  <View style={[styles.corner, { bottom: 0, right: 0, borderBottomWidth: 4, borderRightWidth: 4 }]} />
-                </View>
-                <View style={styles.camMeta} pointerEvents="none">
-                  <View style={styles.recDot} />
-                  <T variant="tiny" style={{ color: '#fff', fontWeight: '700' }}>
-                    Point at the QR code on the bike lock
+          <View style={styles.scannerCard}>
+            <View style={styles.cameraBox}>
+              {Platform.OS === 'web' ? (
+                <>
+                  <WebCameraQrView onDetect={handleQrString} />
+                  <View style={styles.scanStatus} pointerEvents="none">
+                    <View style={styles.recDot} />
+                    <T variant="tiny" style={styles.scanStatusText}>WEB SCANNER READY</T>
+                  </View>
+                  <View style={styles.frame} pointerEvents="none">
+                    <View style={[styles.corner, { top: 0, left: 0, borderTopWidth: 4, borderLeftWidth: 4 }]} />
+                    <View style={[styles.corner, { top: 0, right: 0, borderTopWidth: 4, borderRightWidth: 4 }]} />
+                    <View style={[styles.corner, { bottom: 0, left: 0, borderBottomWidth: 4, borderLeftWidth: 4 }]} />
+                    <View style={[styles.corner, { bottom: 0, right: 0, borderBottomWidth: 4, borderRightWidth: 4 }]} />
+                    <Icon name="qr_code_2" size={42} color="rgba(255,255,255,0.45)" />
+                  </View>
+                  <View style={styles.camMeta} pointerEvents="none">
+                    <Icon name="center_focus_strong" size={18} color={colors.gold} />
+                    <View style={{ flex: 1 }}>
+                      <T variant="small" style={{ color: '#fff', fontWeight: '800' }}>Hold QR code to webcam or upload below</T>
+                      <T variant="tiny" style={{ color: 'rgba(255,255,255,0.76)' }}>Live jsQR browser decoder active</T>
+                    </View>
+                  </View>
+                </>
+              ) : !permission ? (
+                <ActivityIndicator color="#fff" />
+              ) : permission.granted ? (
+                <>
+                  <CameraView
+                    style={StyleSheet.absoluteFill}
+                    facing="back"
+                    enableTorch={torch}
+                    barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
+                    onBarcodeScanned={onScanned}
+                  />
+                  <View style={styles.scanStatus} pointerEvents="none">
+                    <View style={styles.recDot} />
+                    <T variant="tiny" style={styles.scanStatusText}>SCANNER READY</T>
+                  </View>
+                  <View style={styles.frame} pointerEvents="none">
+                    <View style={[styles.corner, { top: 0, left: 0, borderTopWidth: 4, borderLeftWidth: 4 }]} />
+                    <View style={[styles.corner, { top: 0, right: 0, borderTopWidth: 4, borderRightWidth: 4 }]} />
+                    <View style={[styles.corner, { bottom: 0, left: 0, borderBottomWidth: 4, borderLeftWidth: 4 }]} />
+                    <View style={[styles.corner, { bottom: 0, right: 0, borderBottomWidth: 4, borderRightWidth: 4 }]} />
+                    <Icon name="qr_code_2" size={42} color="rgba(255,255,255,0.45)" />
+                  </View>
+                  <View style={styles.camMeta} pointerEvents="none">
+                    <Icon name="center_focus_strong" size={18} color={colors.gold} />
+                    <View style={{ flex: 1 }}>
+                      <T variant="small" style={{ color: '#fff', fontWeight: '800' }}>Align the bike QR code</T>
+                      <T variant="tiny" style={{ color: 'rgba(255,255,255,0.76)' }}>Scanning happens automatically</T>
+                    </View>
+                  </View>
+                </>
+              ) : (
+                <View style={{ alignItems: 'center', gap: 10, padding: 20 }}>
+                  <Icon name="no_photography" size={40} color="#fff" />
+                  <T variant="small" style={{ color: '#fff', textAlign: 'center' }}>
+                    PedalPass needs camera access to scan the bicycle QR code.
                   </T>
+                  <Button label="Allow Camera" icon="photo_camera" variant="light" onPress={requestPermission} />
                 </View>
-              </>
-            ) : (
-              <View style={{ alignItems: 'center', gap: 10, padding: 20 }}>
-                <Icon name="no_photography" size={40} color="#fff" />
-                <T variant="small" style={{ color: '#fff', textAlign: 'center' }}>
-                  PedalPass needs camera access to scan the bicycle QR code.
-                </T>
-                <Button label="Allow Camera" icon="photo_camera" variant="light" onPress={requestPermission} />
-              </View>
-            )}
+              )}
+            </View>
           </View>
 
-          <Card style={{ gap: 8 }}>
+          {/* Upload QR Image or Paste QR Text (especially handy in desktop browser testing!) */}
+          <Card style={{ gap: 10 }}>
             <Row gap={8}>
-              <Icon name="info" size={20} color={colors.primary} />
+              <View style={styles.guideIcon}><Icon name="qr_code" size={18} color={colors.primary} /></View>
+              <View style={{ flex: 1 }}>
+                <T variant="h3">Upload or Paste Bike QR Code</T>
+                <T variant="tiny">Download a bike QR PNG from the Admin Portal (QR Codes page) or paste its PEDALPASS:BP-001:... payload</T>
+              </View>
+            </Row>
+            {Platform.OS === 'web' && (
+              <Button
+                label="Upload QR Code Image (PNG / JPG)"
+                icon="upload_file"
+                variant="outline"
+                onPress={uploadQrImageOnWeb}
+              />
+            )}
+            <Row gap={8}>
+              <View style={{ flex: 1 }}>
+                <Field
+                  value={manualQrInput}
+                  onChangeText={setManualQrInput}
+                  placeholder="PEDALPASS:BP-001:..."
+                  icon="qr_code_2"
+                  autoCapitalize="none"
+                />
+              </View>
+              <Button
+                small
+                label="Verify QR"
+                icon="check_circle"
+                disabled={!manualQrInput.trim()}
+                onPress={() => handleQrString(manualQrInput)}
+              />
+            </Row>
+          </Card>
+
+          <Card style={styles.instructionsCard}>
+            <Row gap={8}>
+              <View style={styles.guideIcon}><Icon name="key" size={18} color={colors.primary} /></View>
               <T variant="h3">How to unlock</T>
             </Row>
-            <T variant="small">1. Scan the QR code on the smart lock.</T>
-            <T variant="small">2. PedalPass checks your account and the bike.</T>
-            <T variant="small">3. Tap "Unlock Bicycle Now", check the brakes, tires and chain, then unlock.</T>
+            {[
+              ['qr_code_scanner', 'Scan', 'Find the QR code on the bike lock.'],
+              ['verified_user', 'Verify', 'We securely check you and the bike.'],
+              ['lock_open', 'Unlock', 'Inspect the bike, then start your ride.'],
+            ].map(([icon, title, detail], index) => (
+              <Row key={title} gap={12} style={{ alignItems: 'flex-start' }}>
+                <View style={styles.stepNumber}><T variant="tiny" style={styles.stepNumberText}>{index + 1}</T></View>
+                <View style={styles.guideIcon}><Icon name={icon} size={18} color={colors.primary} /></View>
+                <View style={{ flex: 1 }}>
+                  <T variant="small" style={{ fontWeight: '800' }}>{title}</T>
+                  <T variant="tiny">{detail}</T>
+                </View>
+              </Row>
+            ))}
           </Card>
 
           {looking && <ActivityIndicator color={colors.primary} />}
@@ -300,7 +497,11 @@ export function ScanScreen({ user, bikes, hasActiveRide, onNavigate, onStartRide
       ) : (
         <>
           {/* Detected bike */}
-          <Card>
+          <Card style={styles.bikeCard}>
+            <Row gap={6} style={{ marginBottom: 12 }}>
+              <View style={styles.foundDot} />
+              <T variant="tiny" style={{ color: colors.success, fontWeight: '800', letterSpacing: 0.5 }}>BIKE FOUND</T>
+            </Row>
             <Row gap={12}>
               {bike.imageUrl ? (
                 <Image source={{ uri: bike.imageUrl }} style={styles.bikeImg} />
@@ -310,17 +511,13 @@ export function ScanScreen({ user, bikes, hasActiveRide, onNavigate, onStartRide
                 </View>
               )}
               <View style={{ flex: 1, gap: 3 }}>
-                <Row gap={6} style={{ flexWrap: 'wrap' }}>
-                  <Badge label={bike.id} />
-                  <T variant="tiny">
-                    {bike.station} ({bike.bay})
-                  </T>
-                </Row>
-                <T variant="h3">{bike.model}</T>
+                <T variant="h2" style={{ color: colors.primary }}>{bike.id}</T>
+                <T variant="small" style={{ fontWeight: '700' }}>{bike.model}</T>
+                <T variant="tiny">{bike.station} • {bike.bay}</T>
                 <Row gap={8}>
-                  <Row gap={2}>
+                  <Row gap={4} style={styles.batteryPill}>
                     <Icon name="battery_charging_full" size={15} color={colors.success} />
-                    <T variant="tiny">{bike.battery}% lock battery</T>
+                    <T variant="tiny" style={{ color: colors.success, fontWeight: '700' }}>{bike.battery}% battery</T>
                   </Row>
                 </Row>
               </View>
@@ -336,16 +533,14 @@ export function ScanScreen({ user, bikes, hasActiveRide, onNavigate, onStartRide
               </Row>
               {allOk && <Badge label="ALL CHECKS PASSED" bg={colors.successContainer} fg={colors.success} />}
             </Row>
-            {checks.map((c, i) => (
+            {checks.map((c) => (
               <Row key={c.title} gap={10} style={{ alignItems: 'flex-start' }}>
                 <View style={[styles.stepDot, { backgroundColor: c.ok ? colors.success : colors.error }]}>
                   <Icon name={c.ok ? 'check' : 'close'} size={14} color="#fff" />
                 </View>
                 <View style={{ flex: 1 }}>
                   <Row style={{ justifyContent: 'space-between' }}>
-                    <T variant="small" style={{ fontWeight: '800', flex: 1 }}>
-                      {i + 1}. {c.title}
-                    </T>
+                    <T variant="small" style={{ fontWeight: '800', flex: 1 }}>{c.title}</T>
                     <T variant="tiny" style={{ color: c.ok ? colors.success : colors.error, fontWeight: '800' }}>
                       {c.ok ? 'PASSED' : 'FAILED'}
                     </T>
@@ -394,7 +589,8 @@ export function ScanScreen({ user, bikes, hasActiveRide, onNavigate, onStartRide
           onClose={() => setInspecting(false)}
           onDone={onInspected}
         />
-      )}    </Screen>
+      )}
+    </Screen>
   );
 }
 
@@ -406,6 +602,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: colors.surfaceContainer,
+    ...shadow,
+  },
+  scannerCard: {
+    padding: 4,
+    borderRadius: radius.lg + 4,
+    backgroundColor: colors.surfaceContainerLowest,
+    ...shadow,
   },
   cameraBox: {
     height: 340,
@@ -415,7 +618,26 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  frame: { width: 210, height: 210 },
+  scanStatus: {
+    position: 'absolute',
+    top: 14,
+    alignSelf: 'center',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: radius.full,
+    backgroundColor: 'rgba(9,16,35,0.68)',
+  },
+  scanStatusText: { color: '#fff', fontWeight: '800', letterSpacing: 0.7 },
+  frame: {
+    width: 210,
+    height: 210,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0,0,0,0.08)',
+  },
   corner: { position: 'absolute', width: 36, height: 36, borderColor: colors.gold, borderRadius: 4 },
   camMeta: {
     position: 'absolute',
@@ -424,14 +646,43 @@ const styles = StyleSheet.create({
     right: 12,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    backgroundColor: 'rgba(0,0,0,0.45)',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: radius.full,
+    gap: 10,
+    backgroundColor: 'rgba(9,16,35,0.76)',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: radius.md,
   },
-  recDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#ff4d4d' },
+  recDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.success },
+  instructionsCard: { gap: 14 },
+  guideIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.secondaryContainer,
+  },
+  stepNumber: {
+    width: 22,
+    height: 22,
+    marginTop: 6,
+    borderRadius: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.primary,
+  },
+  stepNumberText: { color: '#fff', fontWeight: '800' },
+  bikeCard: { padding: 16 },
+  foundDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.success },
   bikeImg: { width: 76, height: 76, borderRadius: radius.md, backgroundColor: colors.surfaceContainer },
+  batteryPill: {
+    alignSelf: 'flex-start',
+    marginTop: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: radius.full,
+    backgroundColor: colors.successContainer,
+  },
   stepDot: {
     width: 24,
     height: 24,

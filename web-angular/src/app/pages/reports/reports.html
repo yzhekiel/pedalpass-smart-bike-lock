@@ -1,0 +1,77 @@
+<div class="page">
+  <section class="grid-stats">
+    <div class="card"><p class="stat-label"><span class="icon">list_alt</span> Open reports</p><p class="stat-value">{{ openCount() }}</p></div>
+    <div class="card"><p class="stat-label"><span class="icon" style="color: var(--red)">dangerous</span> Unsafe (P1) open</p><p class="stat-value">{{ unsafeCount() }}</p></div>
+    <div class="card"><p class="stat-label"><span class="icon" style="color: var(--gold)">call</span> Maintenance not contacted</p><p class="stat-value">{{ newCount() }}</p></div>
+  </section>
+
+  <div class="page-head">
+    <div class="segmented" role="tablist">
+      <button [class.on]="tab() === 'open'" (click)="tab.set('open')">Open</button>
+      <button [class.on]="tab() === 'fixed'" (click)="tab.set('fixed')">Fixed</button>
+      <button [class.on]="tab() === 'all'" (click)="tab.set('all')">All</button>
+    </div>
+    <select class="input" style="width: 180px" [(ngModel)]="priority" aria-label="Priority">
+      <option value="all">All priorities</option>
+      <option value="P1">P1 – Unsafe</option>
+      <option value="P2">P2 – Medium</option>
+      <option value="P3">P3 – Minor</option>
+    </select>
+    <div class="search">
+      <span class="icon">search</span>
+      <input class="input" [(ngModel)]="search" placeholder="Search ticket, bike, problem or reporter" aria-label="Search reports" />
+    </div>
+  </div>
+
+  @if (loading()) {
+    <div class="card state"><div class="spinner"></div>Loading reports…</div>
+  } @else if (error()) {
+    <div class="card state error">
+      <span class="icon">cloud_off</span>
+      <p>Could not load reports: {{ error() }}</p>
+      <button class="btn" (click)="load()">Try again</button>
+    </div>
+  } @else {
+    @for (r of shown(); track r.id) {
+      <article class="card" style="display: grid; gap: 8px">
+        <div class="row wrap small">
+          <a [routerLink]="['/bikes', r.bike_id]" class="mono"><strong>{{ r.bike_id }}</strong></a>
+          <span class="mono muted">{{ r.id }}</span>
+          <span class="badge" [class.bad]="r.priority === 'P1'" [class.warn]="r.priority === 'P2'" [class.info]="r.priority === 'P3'">{{ r.priority }}</span>
+          <span class="badge" [class.good]="r.status === 'Resolved'" [class.plain]="r.status !== 'Resolved'">{{ r.status | reportStep }}</span>
+          <span class="grow"></span>
+          <span class="muted">{{ r.created_at | date: 'MMM d, y, h:mm a' }}</span>
+        </div>
+        <h3>{{ r.issue_title }}</h3>
+        <p class="small muted">
+          Reported by {{ r.reported_by }} • {{ r.station }} ({{ r.bay }})
+          @if (r.resolved_at) { • Fixed {{ r.resolved_at | date: 'MMM d' }} }
+          @if (r.assigned_tech) { by {{ r.assigned_tech }} }
+        </p>
+        @if (r.resolution_notes) {
+          <em class="small muted">"{{ r.resolution_notes }}"</em>
+        }
+        @if (r.status !== 'Resolved') {
+          <div class="row wrap" style="border-top: 1px solid var(--line); padding-top: 10px">
+            <select class="input" style="width: auto" [ngModel]="r.status" (ngModelChange)="setStep(r, $event)" [disabled]="busy() === r.id" aria-label="Report step">
+              @for (s of steps; track s) {
+                <option [value]="s">{{ s | reportStep }}</option>
+              }
+            </select>
+            <span class="grow"></span>
+            <button class="btn primary small" (click)="fixing.set(r)"><span class="icon">verified</span> Mark as fixed</button>
+          </div>
+        }
+      </article>
+    } @empty {
+      <div class="card state">
+        <span class="icon">task_alt</span>
+        <p>{{ reports().length ? 'No reports match these filters.' : 'No problems have been reported yet.' }}</p>
+      </div>
+    }
+  }
+</div>
+
+@if (fixing(); as r) {
+  <app-mark-fixed-dialog [report]="r" [busy]="busy() === r.id" (fixed)="markFixed(r, $event)" (cancelled)="fixing.set(null)" />
+}

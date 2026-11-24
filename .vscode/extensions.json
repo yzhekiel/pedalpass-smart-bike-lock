@@ -1,0 +1,9 @@
+{
+  "recommendations": [
+    "platformio.platformio-ide",
+    "ms-vscode.cpptools",
+    "expo.vscode-expo-tools",
+    "angular.ng-template",
+    "dbaeumer.vscode-eslint"
+  ]
+}

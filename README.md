@@ -1,14 +1,19 @@
-# PedalPass — Campus Bicycle Access System (DYCI)
+# PedalPass — Campus Bicycle Access System & ESP32 Smart Bike Lock (DYCI)
 
-> **Full documentation:** [docs/DOCUMENTATION.md](docs/DOCUMENTATION.md) — setup, running the apps, admin accounts, how each page works, troubleshooting.
+> **🚀 Team VS Code & PlatformIO Setup Guide:** **[TEAM_VSCODE_SETUP_GUIDE.md](TEAM_VSCODE_SETUP_GUIDE.md)** — Complete step-by-step guide to open **`pedalpass.code-workspace`**, run **`setup-project.ps1`** / **`start-all.bat`**, and build/upload the **ESP32 Smart Bike Lock firmware (`firmware/`)** in VS Code with PlatformIO!
+>
+> **Full system documentation:** [docs/DOCUMENTATION.md](docs/DOCUMENTATION.md) — setup, running the apps, admin accounts, how each page works, troubleshooting.
 
-This folder has two apps that work together:
+This repository includes the full software and hardware stack:
 
-| Folder | Who uses it | Built with | How to open |
+| Folder / File | Who uses it | Built with | How to open |
 |---|---|---|---|
-| `mobile/` | **Students & faculty**: scan QR, unlock bike, ride, return, history, report issue | Expo (React Native), SDK 58 | **Expo Go** on your phone |
-| `web/` | **Admins**: identity approvals, fleet, SOS alerts, repairs, parts | React + Vite + Tailwind | Browser (Chrome) |
-| `test-qr-codes/` | Printable or on-screen QR codes for testing the scanner | — | Open the PNG and scan it with the app |
+| `firmware/` | **ESP32 Smart Bike Lock PCB**: 4-state lock controller, dual servos (`MG996R` + `SG90`), 3 status LEDs (`GPIO 21/22/23`), piezo buzzer (`GPIO 19`), `Bike01_Lock` SoftAP (`192.168.4.1`) | PlatformIO (`esp32dev`, Arduino C++) | Open **`pedalpass.code-workspace`** in VS Code (PlatformIO IDE) |
+| `mobile/` | **Students & faculty**: scan/upload QR, unlock bike, mid-ride temporary park lock, return, history, report issue | Expo (React Native + Expo Web), SDK 58 | **[http://localhost:8081](http://localhost:8081)** in Browser or **Expo Go** on your phone |
+| `web/` | **Admins (React)**: identity approvals, fleet, QR codes, SOS alerts, repairs, parts | React + Vite + Tailwind | **[http://localhost:3000](http://localhost:3000)** |
+| `web-angular/` | **Admins (Angular 22)**: full admin portal in Angular 22 | Angular 22 | **[http://localhost:4200](http://localhost:4200)** |
+| `esp32-bridge.mjs` | **Wi-Fi Hardware Bridge**: forwards lock commands from `mobile/` to the physical ESP32 (`http://192.168.4.1`) with automatic simulated fallback | Node.js HTTP Bridge | `http://localhost:3001` (started by `start-all.bat`) |
+| `test-qr-codes/` | Legacy sample QR codes (Note: since Migration 010, download live signed QR codes from the Admin Portal's **QR Codes** page) | — | Admin Portal $\rightarrow$ **QR Codes** $\rightarrow$ Download PNG |
 
 Both apps run on a **Supabase** database (live data, no sample data in the code). Set it up first: see "Next steps" below.
 

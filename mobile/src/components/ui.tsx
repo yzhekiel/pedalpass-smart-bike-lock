@@ -1,6 +1,9 @@
-import React, { ReactNode, useState } from 'react';
+import React, { ReactNode, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Animated,
+  Easing,
+  Image,
   KeyboardTypeOptions,
   Modal,
   Pressable,
@@ -14,10 +17,56 @@ import {
   ViewStyle,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { StatusBar } from 'expo-status-bar';
 import { colors, radius, shadow } from '../theme';
 import { Icon } from './Icon';
 
 /* ---------- Layout ---------- */
+
+function useHeaderEntrance() {
+  const opacity = useRef(new Animated.Value(0.76)).current;
+  const translateY = useRef(new Animated.Value(-12)).current;
+  const contentOpacity = useRef(new Animated.Value(0)).current;
+  const contentY = useRef(new Animated.Value(9)).current;
+
+  useEffect(() => {
+    const animation = Animated.parallel([
+      Animated.timing(opacity, {
+        toValue: 1,
+        duration: 230,
+        easing: Easing.out(Easing.quad),
+        useNativeDriver: true,
+      }),
+      Animated.timing(translateY, {
+        toValue: 0,
+        duration: 300,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }),
+      Animated.sequence([
+        Animated.delay(65),
+        Animated.parallel([
+          Animated.timing(contentOpacity, {
+            toValue: 1,
+            duration: 250,
+            easing: Easing.out(Easing.quad),
+            useNativeDriver: true,
+          }),
+          Animated.timing(contentY, {
+            toValue: 0,
+            duration: 300,
+            easing: Easing.out(Easing.cubic),
+            useNativeDriver: true,
+          }),
+        ]),
+      ]),
+    ]);
+    animation.start();
+    return () => animation.stop();
+  }, [contentOpacity, contentY, opacity, translateY]);
+
+  return { opacity, translateY, contentOpacity, contentY };
+}
 
 export function Screen({
   children,
@@ -35,7 +84,7 @@ export function Screen({
       {header}
       {scroll ? (
         <ScrollView
-          contentContainerStyle={{ padding: 16, paddingBottom: bottomPad, gap: 14 }}
+          contentContainerStyle={{ padding: 20, paddingBottom: bottomPad, gap: 20 }}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
@@ -59,12 +108,16 @@ export function Header({
   onBack?: () => void;
   right?: ReactNode;
 }) {
+  const motion = useHeaderEntrance();
   return (
-    <View style={styles.header}>
-      <View style={[styles.row, { gap: 10, flex: 1 }]}>
+    <Animated.View style={[styles.header, { opacity: motion.opacity, transform: [{ translateY: motion.translateY }] }]}>
+      <StatusBar style="light" />
+      <Animated.View
+        style={[styles.row, { gap: 10, flex: 1 }, { opacity: motion.contentOpacity, transform: [{ translateY: motion.contentY }] }]}
+      >
         {onBack && (
           <Pressable onPress={onBack} style={styles.iconBtn} hitSlop={8} accessibilityLabel="Go back">
-            <Icon name="arrow_back" size={22} color={colors.onSurface} />
+            <Icon name="arrow_back" size={22} color="#fff" />
           </Pressable>
         )}
         <View style={{ flex: 1 }}>
@@ -73,9 +126,170 @@ export function Header({
           </Text>
           {subtitle ? <Text style={styles.headerSub}>{subtitle}</Text> : null}
         </View>
-      </View>
-      {right}
-    </View>
+      </Animated.View>
+      <Animated.View style={[styles.headerActions, { opacity: motion.contentOpacity }]}>
+        <HeaderMascot />
+        <NotificationButton compact />
+        {right}
+      </Animated.View>
+    </Animated.View>
+  );
+}
+
+/** Compact brand mascot used consistently across every app header. */
+export function HeaderMascot({ size = 42 }: { size?: number }) {
+  return (
+    <Image
+      source={require('../../assets/pedalpass-mascot-transparent.png')}
+      style={{ width: size, height: size }}
+      resizeMode="contain"
+      accessibilityIgnoresInvertColors
+    />
+  );
+}
+
+/** The signed-in rider header shared by Home and Profile. */
+export function RiderInfoHeader({
+  name,
+  memberType,
+  avatarUrl,
+  subtitle = 'Scan an available bicycle to begin your campus ride.',
+}: {
+  name: string;
+  memberType: 'student' | 'faculty';
+  avatarUrl?: string;
+  subtitle?: string;
+}) {
+  const motion = useHeaderEntrance();
+  const initials =
+    name
+      .split(/\s+/)
+      .filter((word) => /^[A-Za-z]/.test(word) && !word.endsWith('.'))
+      .slice(0, 2)
+      .map((word) => word[0].toUpperCase())
+      .join('') || 'P';
+
+  return (
+    <Animated.View style={[styles.riderHeader, { opacity: motion.opacity, transform: [{ translateY: motion.translateY }] }]}>
+      <StatusBar style="light" />
+      <Animated.View
+        style={[styles.row, styles.riderHeaderTop, { opacity: motion.contentOpacity, transform: [{ translateY: motion.contentY }] }]}
+      >
+        <Row gap={11} style={{ flex: 1 }}>
+          {avatarUrl ? (
+            <Image source={{ uri: avatarUrl }} style={styles.riderAvatar} />
+          ) : (
+            <View style={[styles.riderAvatar, styles.riderAvatarEmpty]}>
+              <Text style={styles.riderAvatarText}>{initials}</Text>
+            </View>
+          )}
+          <View style={{ flex: 1 }}>
+            <Text style={styles.riderAccount}>{memberType === 'faculty' ? 'FACULTY RIDER' : 'STUDENT RIDER'}</Text>
+            <Text style={styles.riderName} numberOfLines={1}>{name}</Text>
+          </View>
+        </Row>
+        <HeaderMascot size={48} />
+        <NotificationButton />
+      </Animated.View>
+      <Animated.Text style={[styles.riderSubtitle, { opacity: motion.contentOpacity }]} numberOfLines={1}>{subtitle}</Animated.Text>
+    </Animated.View>
+  );
+}
+
+const headerNotifications = [
+  {
+    id: 'station',
+    icon: 'pedal_bike',
+    title: 'Bikes are ready',
+    message: 'Bicycles are available now at the Covered Court Hub.',
+    time: 'Now',
+    color: colors.primary,
+    bg: colors.secondaryContainer,
+  },
+  {
+    id: 'safety',
+    icon: 'health_and_safety',
+    title: 'Ride safely',
+    message: 'Check the brakes, tires, and chain before every campus ride.',
+    time: 'Today',
+    color: colors.success,
+    bg: colors.successContainer,
+  },
+  {
+    id: 'account',
+    icon: 'verified_user',
+    title: 'PedalPass account',
+    message: 'Your account and ride activity are protected by DYCI verification.',
+    time: 'This week',
+    color: colors.tertiary,
+    bg: colors.tertiaryContainer,
+  },
+] as const;
+
+/** Header bell with a built-in notification center and read/unread state. */
+export function NotificationButton({ compact = false }: { compact?: boolean }) {
+  const [open, setOpen] = useState(false);
+  const [read, setRead] = useState<Set<string>>(new Set());
+  const unread = headerNotifications.length - read.size;
+  const markRead = (id: string) => setRead((current) => new Set(current).add(id));
+
+  return (
+    <>
+      <Pressable
+        onPress={() => setOpen(true)}
+        style={[styles.notificationButton, compact && styles.notificationButtonCompact]}
+        accessibilityRole="button"
+        accessibilityLabel={`${unread} unread notifications`}
+      >
+        <Icon name="notifications" size={compact ? 20 : 22} color="#fff" />
+        {unread > 0 && <View style={styles.notificationDot} />}
+      </Pressable>
+
+      <Modal visible={open} animationType="slide" onRequestClose={() => setOpen(false)}>
+        <SafeAreaView style={styles.notificationSafe} edges={['top', 'bottom']}>
+          <View style={styles.notificationHeader}>
+            <Pressable onPress={() => setOpen(false)} style={styles.notificationClose} accessibilityLabel="Close notifications">
+              <Icon name="arrow_back" size={22} color="#fff" />
+            </Pressable>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.notificationTitle}>Notifications</Text>
+              <Text style={styles.notificationSubtitle}>{unread ? `${unread} unread update${unread === 1 ? '' : 's'}` : 'You’re all caught up'}</Text>
+            </View>
+            {unread > 0 && (
+              <Pressable onPress={() => setRead(new Set(headerNotifications.map((item) => item.id)))} hitSlop={8}>
+                <Text style={styles.markAllText}>Mark all read</Text>
+              </Pressable>
+            )}
+          </View>
+
+          <ScrollView contentContainerStyle={styles.notificationList} showsVerticalScrollIndicator={false}>
+            <Text style={styles.notificationEyebrow}>RECENT UPDATES</Text>
+            {headerNotifications.map((item) => {
+              const isRead = read.has(item.id);
+              return (
+                <Pressable key={item.id} onPress={() => markRead(item.id)} style={[styles.notificationCard, isRead && styles.notificationCardRead]}>
+                  <View style={[styles.notificationIcon, { backgroundColor: item.bg }]}>
+                    <Icon name={item.icon} size={21} color={item.color} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Row style={{ justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                      <Text style={styles.notificationItemTitle}>{item.title}</Text>
+                      {!isRead && <View style={styles.unreadDot} />}
+                    </Row>
+                    <Text style={styles.notificationMessage}>{item.message}</Text>
+                    <Text style={styles.notificationTime}>{item.time}</Text>
+                  </View>
+                </Pressable>
+              );
+            })}
+            <View style={styles.notificationTip}>
+              <Icon name="info" size={18} color={colors.primary} />
+              <Text style={styles.notificationTipText}>Tap an update to mark it as read.</Text>
+            </View>
+          </ScrollView>
+        </SafeAreaView>
+      </Modal>
+    </>
   );
 }
 
@@ -431,22 +645,43 @@ const text = StyleSheet.create({
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.background },
   header: {
+    minHeight: 108,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingTop: 8,
-    paddingBottom: 6,
-    backgroundColor: colors.surface,
+    paddingTop: 10,
+    paddingBottom: 14,
+    backgroundColor: colors.primaryFill,
+    borderBottomLeftRadius: 24,
+    borderBottomRightRadius: 24,
     gap: 8,
   },
-  headerTitle: { fontSize: 20, fontWeight: '800', color: colors.onSurface, letterSpacing: -0.2 },
-  headerSub: { fontSize: 11, color: colors.onSurfaceVariant },
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: 3 },
+  headerTitle: { fontSize: 20, fontWeight: '800', color: '#fff', letterSpacing: -0.2 },
+  headerSub: { fontSize: 11, color: 'rgba(255,255,255,0.74)' },
+  riderHeader: {
+    minHeight: 108,
+    overflow: 'hidden',
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    paddingBottom: 12,
+    backgroundColor: colors.primaryFill,
+    borderBottomLeftRadius: 24,
+    borderBottomRightRadius: 24,
+  },
+  riderHeaderTop: { justifyContent: 'space-between', zIndex: 1 },
+  riderAccount: { color: colors.gold, fontSize: 9, fontWeight: '900', letterSpacing: 0.9 },
+  riderName: { color: '#fff', fontSize: 14, fontWeight: '900', marginTop: 1 },
+  riderSubtitle: { color: 'rgba(255,255,255,0.72)', fontSize: 11, marginTop: 8 },
+  riderAvatar: { width: 38, height: 38, borderRadius: 12, backgroundColor: '#fff' },
+  riderAvatarEmpty: { alignItems: 'center', justifyContent: 'center' },
+  riderAvatarText: { color: colors.primary, fontSize: 13, fontWeight: '900' },
   row: { flexDirection: 'row', alignItems: 'center' },
   card: {
     backgroundColor: colors.surfaceContainerLowest,
     borderRadius: radius.lg,
-    padding: 16,
+    padding: 18,
     ...shadow,
   },
   tile: { flex: 1, minWidth: '46%', padding: 14, borderRadius: radius.lg },
@@ -480,6 +715,76 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: colors.surface,
   },
+  notificationButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.13)',
+  },
+  notificationButtonCompact: { width: 38, height: 38, borderRadius: 19 },
+  notificationDot: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: colors.gold,
+    borderWidth: 1.5,
+    borderColor: colors.primaryFill,
+  },
+  notificationSafe: { flex: 1, backgroundColor: colors.background },
+  notificationHeader: {
+    minHeight: 108,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingHorizontal: 16,
+    paddingBottom: 12,
+    backgroundColor: colors.primaryFill,
+    borderBottomLeftRadius: 24,
+    borderBottomRightRadius: 24,
+  },
+  notificationClose: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.12)',
+  },
+  notificationTitle: { color: '#fff', fontSize: 20, fontWeight: '900' },
+  notificationSubtitle: { color: 'rgba(255,255,255,0.72)', fontSize: 11, marginTop: 2 },
+  markAllText: { color: colors.gold, fontSize: 11, fontWeight: '900' },
+  notificationList: { padding: 20, paddingBottom: 40, gap: 12 },
+  notificationEyebrow: { color: colors.primary, fontSize: 10, fontWeight: '900', letterSpacing: 1 },
+  notificationCard: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+    padding: 16,
+    borderRadius: radius.lg,
+    backgroundColor: colors.surfaceContainerLowest,
+    ...shadow,
+  },
+  notificationCardRead: { opacity: 0.68 },
+  notificationIcon: { width: 42, height: 42, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+  notificationItemTitle: { flex: 1, color: colors.onSurface, fontSize: 14, fontWeight: '900' },
+  notificationMessage: { color: colors.onSurfaceVariant, fontSize: 12, lineHeight: 17, marginTop: 4 },
+  notificationTime: { color: colors.primary, fontSize: 10, fontWeight: '800', marginTop: 8 },
+  unreadDot: { width: 8, height: 8, borderRadius: 4, marginTop: 4, backgroundColor: colors.gold },
+  notificationTip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 4,
+    padding: 14,
+    borderRadius: radius.md,
+    backgroundColor: colors.secondaryContainer,
+  },
+  notificationTipText: { flex: 1, color: colors.onSecondaryContainer, fontSize: 12, fontWeight: '700' },
   badge: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -510,7 +815,7 @@ const styles = StyleSheet.create({
     borderColor: colors.surfaceContainer,
     borderRadius: radius.full,
     backgroundColor: colors.surfaceContainer,
-    paddingHorizontal: 16,
+    paddingHorizontal: 18,
   },
   input: { flex: 1, paddingVertical: 14, fontSize: 14, color: colors.onSurface },
   iconTile: {

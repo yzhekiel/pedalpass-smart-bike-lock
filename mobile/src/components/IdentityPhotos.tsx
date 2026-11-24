@@ -33,7 +33,13 @@ export async function pickPhoto(selfie: boolean, fromLibrary = false): Promise<P
         cameraType: selfie ? ImagePicker.CameraType.front : ImagePicker.CameraType.back,
       });
   const asset = result.canceled ? null : result.assets[0];
-  return asset?.base64 ? { uri: asset.uri, base64: asset.base64 } : null;
+  if (!asset) return null;
+  if (asset.base64) return { uri: asset.uri, base64: asset.base64 };
+  if (asset.uri?.startsWith('data:')) {
+    const idx = asset.uri.indexOf('base64,');
+    if (idx !== -1) return { uri: asset.uri, base64: asset.uri.slice(idx + 7) };
+  }
+  return null;
 }
 
 export function PhotoCard({

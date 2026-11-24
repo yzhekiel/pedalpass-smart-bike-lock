@@ -1,0 +1,83 @@
+<div class="page">
+  <div class="page-head">
+    <div class="row wrap grow">
+      <div class="search">
+        <span class="icon">search</span>
+        <!-- two-way binding: typing updates `search`, and `search` updates the box -->
+        <input class="input" [(ngModel)]="search" placeholder="Search code, lock, bay or model" aria-label="Search bikes" />
+      </div>
+      <select class="input" style="width: 200px" [(ngModel)]="statusFilter" aria-label="Filter by status">
+        <option value="all">All statuses</option>
+        @for (opt of statusOptions; track opt[0]) {
+          <option [value]="opt[0]">{{ opt[1] }}</option>
+        }
+      </select>
+    </div>
+    <button class="btn primary" (click)="openAdd()" [disabled]="loading()"><span class="icon">add</span> Add bike</button>
+  </div>
+
+  <section class="card" style="padding: 0">
+    @if (loading()) {
+      <div class="state"><div class="spinner"></div>Loading bikes…</div>
+    } @else if (error()) {
+      <div class="state error">
+        <span class="icon">cloud_off</span>
+        <p>Could not load the bikes: {{ error() }}</p>
+        <button class="btn" (click)="load()">Try again</button>
+      </div>
+    } @else if (shown().length === 0) {
+      <div class="state">
+        <span class="icon">pedal_bike</span>
+        @if (bikes().length === 0) {
+          <p>No bikes yet. Click Add bike to add the first one.</p>
+        } @else {
+          <p>No bike matches "{{ search() }}".</p>
+        }
+      </div>
+    } @else {
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Bike</th><th>Battery</th><th>Status</th><th>Lock</th><th></th></tr>
+          </thead>
+          <tbody>
+            @for (bike of shown(); track bike.id) {
+              <!-- CHILD row: bike goes in; history / edit / remove come back out -->
+              <tr appBikeRow [bike]="bike" (history)="openHistory($event)" (edit)="openEdit($event)" (remove)="removing.set($event)"></tr>
+            }
+          </tbody>
+        </table>
+      </div>
+      <p class="small muted" style="padding: 12px 18px">{{ shown().length }} of {{ bikes().length }} bikes</p>
+    }
+  </section>
+</div>
+
+@if (formOpen()) {
+  <app-bike-form
+    [bike]="editing()"
+    [takenCodes]="takenCodes()"
+    [suggestedCode]="nextCode()"
+    [saving]="saving()"
+    (saved)="save($event)"
+    (cancelled)="formOpen.set(false)"
+  />
+}
+
+@if (removing(); as bike) {
+  <app-remove-bike-dialog [bike]="bike" [busy]="saving()" (confirmed)="remove($event)" (cancelled)="removing.set(null)" />
+}
+
+@if (newQr(); as qr) {
+  <div class="overlay" (click)="newQr.set(null)">
+    <div class="dialog" style="text-align: center; justify-items: center" (click)="$event.stopPropagation()">
+      <h2>{{ qr.bike_id }} added</h2>
+      <app-qr-image [payload]="qr.payload" [label]="qr.bike_id" [size]="220" />
+      <p class="muted small">Print this QR code and attach it to {{ qr.bike_id }}. Riders scan it to unlock the bike.</p>
+      <div class="row">
+        <button class="btn" (click)="openHistory(qr.bike_id)">Open bike page to print</button>
+        <button class="btn primary" (click)="newQr.set(null)">Done</button>
+      </div>
+    </div>
+  </div>
+}

@@ -1,18 +1,11 @@
 import React from 'react';
-import Svg, { Circle, Defs, Ellipse, G, Line, LinearGradient, Path, Rect, Stop } from 'react-native-svg';
+import Svg, { Circle, Ellipse, G, Line, Path, Rect } from 'react-native-svg';
 
 type Props = { size?: number; showOuterCard?: boolean };
 
 export function PedalPassLogo({ size = 72, showOuterCard = true }: Props) {
   return (
     <Svg width={size} height={size} viewBox="0 0 120 120" fill="none">
-      <Defs>
-        <LinearGradient id="blueCardGrad" x1="60" y1="20" x2="60" y2="100" gradientUnits="userSpaceOnUse">
-          <Stop offset="0%" stopColor="#0B2B7E" />
-          <Stop offset="100%" stopColor="#051648" />
-        </LinearGradient>
-      </Defs>
-
       {showOuterCard && (
         <Rect x="4" y="4" width="112" height="112" rx="26" fill="#FFFFFF" stroke="#F5A818" strokeWidth="3.2" />
       )}
@@ -23,7 +16,7 @@ export function PedalPassLogo({ size = 72, showOuterCard = true }: Props) {
         width={showOuterCard ? '80' : '108'}
         height={showOuterCard ? '80' : '108'}
         rx={showOuterCard ? '18' : '24'}
-        fill="url(#blueCardGrad)"
+        fill="#0B2984"
       />
 
       <G

@@ -11,6 +11,7 @@ import { ScreenType, WorkOrderItem } from './types';
 import { isSupabaseConfigured, supabase } from './lib/supabase';
 import { StaffProfile, restoreStaffSession, staffSignOut } from './lib/auth';
 import { LoginScreen } from './components/LoginScreen';
+import { LandingPage } from './components/LandingPage';
 import { PedalPassLogo } from './components/PedalPassLogo';
 import { SecurityScreen } from './components/SecurityScreen';
 import { ReportsListScreen } from './components/ReportsListScreen';
@@ -57,6 +58,7 @@ function useClickOutside(open: boolean, close: () => void) {
 
 export default function App() {
   const [profile, setProfile] = useState<StaffProfile | null>(null); // the signed-in admin
+  const [authView, setAuthView] = useState<'landing' | 'login'>('landing');
   const [screen, setScreen] = useState<ScreenType>(HOME);
   const [menuOpen, setMenuOpen] = useState(false); // sidebar on phones
   const [accountOpen, setAccountOpen] = useState(false);
@@ -98,7 +100,10 @@ export default function App() {
   if (restoring) return <div className="min-h-screen bg-background" />;
 
   if (!profile) {
-    return <LoginScreen onLogin={(_, p) => login(p)} />;
+    if (authView === 'login') {
+      return <LoginScreen onLogin={(_, p) => login(p)} onBack={() => setAuthView('landing')} />;
+    }
+    return <LandingPage onAdminLogin={() => setAuthView('login')} />;
   }
 
   // Older screens link to rider screens; keep admins inside their pages.
@@ -118,6 +123,7 @@ export default function App() {
   const logout = () => {
     staffSignOut();
     setProfile(null);
+    setAuthView('landing');
     setSelectedWorkOrder(null);
     setAccountOpen(false);
   };

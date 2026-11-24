@@ -1,0 +1,144 @@
+<div class="page">
+  <div class="row">
+    <a routerLink="/bikes" class="btn ghost"><span class="icon">arrow_back</span> All bikes</a>
+  </div>
+
+  @if (loading()) {
+    <div class="card state"><div class="spinner"></div>Loading {{ id() }}…</div>
+  } @else if (error() || !bike()) {
+    <div class="card state error">
+      <span class="icon">error</span>
+      <p>{{ error() || 'Bike not found.' }}</p>
+      <button class="btn" (click)="load()">Try again</button>
+    </div>
+  } @else {
+    @let b = bike()!;
+    <!-- Bike + QR -->
+    <section class="two-col">
+      <div class="card" style="display: grid; gap: 14px; align-content: start">
+        <div class="row">
+          <h2 class="grow">{{ b.id }}</h2>
+          <app-status-badge [bike]="b" />
+        </div>
+        <table>
+          <tbody>
+            <tr><td class="muted">Model</td><td>{{ b.model }}</td></tr>
+            <tr><td class="muted">Smart lock</td><td>{{ b.node_id }}</td></tr>
+            <tr><td class="muted">Station</td><td>{{ b.station }} ({{ b.bay }})</td></tr>
+            <tr><td class="muted">Lock battery</td><td>{{ b.battery }}%</td></tr>
+            <tr><td class="muted">Open reports</td><td>{{ openReports() }}</td></tr>
+            <tr><td class="muted">Last change</td><td>{{ b.updated_at | date: 'MMM d, y, h:mm a' }}</td></tr>
+          </tbody>
+        </table>
+        @if (onHold() && openReports() === 0) {
+          <button class="btn primary" (click)="makeAvailable()"><span class="icon">check_circle</span> Make available</button>
+        } @else if (onHold()) {
+          <p class="small muted">On hold until its open reports are marked fixed (Reports page).</p>
+        }
+      </div>
+
+      <div class="card" style="display: grid; gap: 14px; justify-items: center; text-align: center">
+        <h3>QR code</h3>
+        @if (qr(); as q) {
+          <app-qr-image [payload]="q.payload" [label]="q.bike_id" [size]="190" />
+          <p class="small muted">Version {{ q.version }} • {{ q.updated_at | date: 'MMM d, y' }}</p>
+          <div class="row wrap" style="justify-content: center">
+            <a class="btn small" [href]="qrSrc()" [download]="downloadName()"><span class="icon">download</span> Download</a>
+            <button class="btn small" (click)="print()"><span class="icon">print</span> Print</button>
+            <button class="btn small danger" (click)="regenerate()" [disabled]="busy()"><span class="icon">autorenew</span> Regenerate</button>
+          </div>
+        } @else {
+          <p class="muted small">No QR code yet.</p>
+        }
+      </div>
+    </section>
+
+    <section class="two-col">
+      <!-- Riders -->
+      <div class="card">
+        <div class="card-head"><h3>Riders</h3><span class="badge plain">{{ rides().length }}</span></div>
+        @for (r of rides(); track r.id) {
+          <div class="row" style="padding: 10px 0; border-top: 1px solid var(--line)">
+            <div class="grow">
+              <strong>{{ r.profiles?.name ?? 'Deleted account' }}</strong>
+              @if (r.profiles?.student_id) {
+                <span class="muted small"> • {{ r.profiles?.student_id }}</span>
+              }
+              <div class="small muted">
+                {{ r.started_at | date: 'MMM d, h:mm a' }}
+                @if (r.duration_min != null) { • {{ r.duration_min }} min }
+                @if (r.status === 'active') { • riding now }
+              </div>
+            </div>
+            @switch (r.status) {
+              @case ('Completed') { <span class="badge good">Completed</span> }
+              @case ('active') { <span class="badge info">In use</span> }
+              @default { <span class="badge bad">Issue reported</span> }
+            }
+            @if (r.profiles) {
+              <button class="btn small" (click)="viewRider(r.user_id)"><span class="icon">person</span> View rider</button>
+            }
+          </div>
+        } @empty {
+          <div class="state"><span class="icon">pedal_bike</span>Nobody has ridden this bike yet.</div>
+        }
+      </div>
+
+      <!-- Reports -->
+      <div class="card">
+        <div class="card-head"><h3>Reports and repairs</h3><span class="badge plain">{{ reports().length }}</span></div>
+        @for (rep of reports(); track rep.id) {
+          <div style="padding: 10px 0; border-top: 1px solid var(--line); display: grid; gap: 2px">
+            <div class="row small">
+              <span class="mono">{{ rep.id }}</span>
+              <span class="badge" [class.bad]="rep.priority === 'P1'" [class.warn]="rep.priority === 'P2'" [class.info]="rep.priority === 'P3'">{{ rep.priority }}</span>
+              <span class="grow muted">{{ stepLabel[rep.status] }}</span>
+              <span class="muted">{{ rep.created_at | date: 'MMM d' }}</span>
+            </div>
+            <strong>{{ rep.issue_title }}</strong>
+            <span class="small muted">
+              Reported by {{ rep.reported_by }}
+              @if (rep.assigned_tech) { • Fixed by {{ rep.assigned_tech }} }
+            </span>
+            @if (rep.resolution_notes) {
+              <em class="small muted">"{{ rep.resolution_notes }}"</em>
+            }
+          </div>
+        } @empty {
+          <div class="state"><span class="icon">verified</span>No problems reported for this bike.</div>
+        }
+      </div>
+    </section>
+  }
+</div>
+
+@if (rider(); as p) {
+  <div class="overlay" (click)="rider.set(null)">
+    <div class="dialog" (click)="$event.stopPropagation()" role="dialog" aria-modal="true">
+      <div class="row">
+        <h2 class="grow">{{ p.name }}</h2>
+        <button class="btn ghost" (click)="rider.set(null)" aria-label="Close"><span class="icon">close</span></button>
+      </div>
+      @if (riderPhoto() === undefined) {
+        <div class="state"><div class="spinner"></div></div>
+      } @else if (riderPhoto()) {
+        <img [src]="riderPhoto()" alt="ID photo of {{ p.name }}" style="width: 100%; max-height: 240px; object-fit: contain; border-radius: 12px; background: var(--surface-2)" />
+      } @else {
+        <p class="small muted">No ID photo on file (riders approved before ID photos were kept have none).</p>
+      }
+      <table>
+        <tbody>
+          <tr><td class="muted">{{ p.member_type === 'faculty' ? 'ID No.' : 'Student No.' }}</td><td class="mono">{{ p.student_id ?? '—' }}</td></tr>
+          <tr><td class="muted">Email</td><td><a [href]="'mailto:' + p.email">{{ p.email }}</a></td></tr>
+          @if (p.member_type === 'faculty') {
+            <tr><td class="muted">Department</td><td>{{ p.department ?? '—' }}</td></tr>
+          } @else {
+            <tr><td class="muted">Course</td><td>{{ p.course ?? '—' }} {{ p.year_level ?? '' }} {{ p.section ?? '' }}</td></tr>
+          }
+          <tr><td class="muted">Identity check</td><td>{{ p.verification_status === 'approved' ? 'Approved' : p.verification_status }}</td></tr>
+          <tr><td class="muted">Signed up</td><td>{{ p.created_at | date: 'MMM d, y' }}</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+}

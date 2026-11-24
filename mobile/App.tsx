@@ -1,5 +1,23 @@
-import React, { useState } from 'react';
-import { Alert, BackHandler, View } from 'react-native';
+import React, { ReactNode, useCallback, useEffect, useRef, useState } from 'react';
+import { Alert, Animated, BackHandler, Easing, Platform, StyleSheet, View } from 'react-native';
+
+if (Platform.OS === 'web' && typeof window !== 'undefined') {
+  Alert.alert = (title: string, message?: string, buttons?: any[]) => {
+    const text = [title, message].filter(Boolean).join('\n\n');
+    if (buttons && buttons.length > 1) {
+      const actionBtn = buttons.find((b) => b.style !== 'cancel') || buttons[buttons.length - 1];
+      const cancelBtn = buttons.find((b) => b.style === 'cancel') || buttons[0];
+      if (window.confirm(text)) {
+        actionBtn?.onPress?.();
+      } else {
+        cancelBtn?.onPress?.();
+      }
+    } else {
+      window.alert(text);
+      buttons?.[0]?.onPress?.();
+    }
+  };
+}
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { BicycleItem, RideRecord, ScreenType, UserProfile } from './src/types';
@@ -11,14 +29,41 @@ import { BottomNavBar } from './src/components/BottomNavBar';
 import { LoginScreen } from './src/screens/LoginScreen';
 import { RegisterScreen } from './src/screens/RegisterScreen';
 import { HomeScreen } from './src/screens/HomeScreen';
-import { CampusMapScreen } from './src/screens/CampusMapScreen';
 import { ScanScreen } from './src/screens/ScanScreen';
-import { ActiveRideScreen, conditionOf } from './src/screens/ActiveRideScreen';
-import { InspectionResult } from './src/components/InspectionSheet';
+import { ActiveRideScreen } from './src/screens/ActiveRideScreen';
 import { RideHistoryScreen } from './src/screens/RideHistoryScreen';
 import { ProfileScreen } from './src/screens/ProfileScreen';
+import { InspectionResult } from './src/components/InspectionSheet';
 import { VerifyEmailScreen } from './src/screens/VerifyEmailScreen';
 import { VerifyIdentityScreen } from './src/screens/VerifyIdentityScreen';
+import { IntroScreen } from './src/screens/IntroScreen';
+
+/** One consistent entrance motion for every signed-in screen. */
+function AccountScreenTransition({ children }: { children: ReactNode }) {
+  const opacity = useRef(new Animated.Value(0.88)).current;
+  const translateY = useRef(new Animated.Value(4)).current;
+
+  useEffect(() => {
+    const animation = Animated.parallel([
+      Animated.timing(opacity, {
+        toValue: 1,
+        duration: 150,
+        easing: Easing.out(Easing.quad),
+        useNativeDriver: true,
+      }),
+      Animated.timing(translateY, {
+        toValue: 0,
+        duration: 170,
+        easing: Easing.out(Easing.quad),
+        useNativeDriver: true,
+      }),
+    ]);
+    animation.start();
+    return () => animation.stop();
+  }, [opacity, translateY]);
+
+  return <Animated.View style={[appStyles.accountScreen, { opacity, transform: [{ translateY }] }]}>{children}</Animated.View>;
+}
 
 /**
  * PedalPass — Student / Faculty mobile app (Expo).
@@ -28,16 +73,19 @@ import { VerifyIdentityScreen } from './src/screens/VerifyIdentityScreen';
  * and shared with the staff web portal.
  */
 export default function App() {
+  const [showIntro, setShowIntro] = useState(true);
   const [screen, setScreen] = useState<ScreenType>('login');
   const [bikes, setBikes] = useState<BicycleItem[]>([]);
   const [activeBike, setActiveBike] = useState<BicycleItem | null>(null);
   const [activeRideId, setActiveRideId] = useState<string | null>(null);
   const [rideStartedAt, setRideStartedAt] = useState<number | null>(null);
   const [rides, setRides] = useState<RideRecord[]>([]);
+  const [rideDataLoading, setRideDataLoading] = useState(false);
   const [profile, setProfile] = useState<UserProfile | null>(null); // the signed-in user
   const [pendingEmail, setPendingEmail] = useState(''); // waiting for its 6-digit code
   const [pendingDocs, setPendingDocs] = useState<IdentityDocs | null>(null); // sign-up photos, uploaded after the code
   const [swap, setSwap] = useState<{ rideId: string; fromBikeId: string; reason: string } | null>(null); // scanning a replacement bike
+  const finishIntro = useCallback(() => setShowIntro(false), []);
 
   // Leaving the Scan screen cancels a swap that was not finished (the current ride just continues)
   React.useEffect(() => {
@@ -66,6 +114,7 @@ export default function App() {
 
   // Bikes, ride history, and a ride still in progress (e.g. after the app was closed mid-ride)
   const loadRideData = async (userId: string) => {
+    setRideDataLoading(true);
     try {
       const [freshBikes, active, history] = await Promise.all([
         rideService.fetchBikes(),
@@ -82,6 +131,8 @@ export default function App() {
       }
     } catch (e) {
       Alert.alert('Could not load bikes and rides', (e as Error).message);
+    } finally {
+      setRideDataLoading(false);
     }
   };
 
@@ -97,6 +148,7 @@ export default function App() {
     setRideStartedAt(null);
     setBikes([]);
     setRides([]);
+    setRideDataLoading(false);
     setScreen('login');
   };
 
@@ -166,7 +218,7 @@ export default function App() {
    */
   const endRide = async (inspection: InspectionResult): Promise<boolean> => {
     if (!activeBike || !rideStartedAt || !activeRideId || !profile) return false;
-    const condition = conditionOf(inspection);
+    const condition = inspection.unsafe ? 'damaged' : inspection.problems.length ? 'minor' : 'good';
     let record: RideRecord;
     try {
       record = await rideService.endRide(activeRideId, condition);
@@ -210,71 +262,84 @@ export default function App() {
     <SafeAreaProvider>
       <StatusBar style="dark" />
       <View style={{ flex: 1, backgroundColor: colors.background }}>
-        {screen === 'login' && (
-          <LoginScreen onNavigate={setScreen} onSignedIn={signedIn} onNeedsVerification={needsVerification} />
-        )}
-        {screen === 'register' && (
-          <RegisterScreen onNavigate={setScreen} onSignedIn={signedIn} onNeedsVerification={needsVerification} />
-        )}
-        {screen === 'verify_email' && (
-          <VerifyEmailScreen email={pendingEmail} onNavigate={setScreen} onVerified={emailVerified} />
-        )}
-        {screen === 'verify_identity' && profile && (
-          <VerifyIdentityScreen profile={profile} onProfileChange={signedIn} onLogout={logOut} />
-        )}
-
-        {loggedIn && profile && (
+        {showIntro ? (
+          <IntroScreen onComplete={finishIntro} />
+        ) : (
           <>
-            {screen === 'home' && <HomeScreen user={profile} bikes={bikes} rides={rides} onNavigate={setScreen} activeBike={activeBike} />}
-            {screen === 'scan' && (
-              <ScanScreen
-                user={profile}
-                bikes={bikes}
-                hasActiveRide={!!activeBike}
-                onNavigate={setScreen}
-                onStartRide={startRide}
-                onBikesChanged={refreshBikes}
-                swap={swap}
-                onSwapAborted={swapAborted}
-              />
+            {screen === 'login' && (
+              <LoginScreen onNavigate={setScreen} onSignedIn={signedIn} onNeedsVerification={needsVerification} />
             )}
-            {screen === 'active_ride' && (
-              <ActiveRideScreen
-                bike={activeBike}
-                startedAt={rideStartedAt}
-                onNavigate={setScreen}
-                onEndRide={endRide}
-                onSos={sendSos}
-                onSwap={(reason) => {
-                  if (!activeRideId || !activeBike) return;
-                  setSwap({ rideId: activeRideId, fromBikeId: activeBike.id, reason });
-                  setScreen('scan');
-                }}
-              />
+            {screen === 'register' && (
+              <RegisterScreen onNavigate={setScreen} onSignedIn={signedIn} onNeedsVerification={needsVerification} />
             )}
-            {screen === 'ride_history' && (
-              <RideHistoryScreen
-                user={profile}
-                rides={rides}
-                onNavigate={setScreen}
-                activeBike={activeBike}
-                rideStartedAt={rideStartedAt}
-              />
+            {screen === 'verify_email' && (
+              <VerifyEmailScreen email={pendingEmail} onNavigate={setScreen} onVerified={emailVerified} />
             )}
-            {screen === 'campus_map' && <CampusMapScreen bikes={bikes} onNavigate={setScreen} />}
-            {screen === 'profile' && (
-              <ProfileScreen
-                user={profile}
-                rides={rides}
-                hasActiveRide={!!activeBike}
-                onNavigate={setScreen}
-                onLogout={logOut}
-              />
+            {screen === 'verify_identity' && profile && (
+              <VerifyIdentityScreen profile={profile} onProfileChange={signedIn} onLogout={logOut} />
             )}
-            <BottomNavBar current={screen} hasActiveRide={!!activeBike} onNavigate={setScreen} />
+
+            {loggedIn && profile && (
+              <>
+                <AccountScreenTransition key={screen}>
+                    {screen === 'home' && (
+                      <HomeScreen user={profile} bikes={bikes} rides={rides} loading={rideDataLoading} onNavigate={setScreen} activeBike={activeBike} />
+                    )}
+                    {screen === 'scan' && (
+                      <ScanScreen
+                        user={profile}
+                        bikes={bikes}
+                        hasActiveRide={!!activeBike}
+                        onNavigate={setScreen}
+                        onStartRide={startRide}
+                        onBikesChanged={refreshBikes}
+                        swap={swap}
+                        onSwapAborted={swapAborted}
+                      />
+                    )}
+                    {screen === 'active_ride' && (
+                      <ActiveRideScreen
+                        bike={activeBike}
+                        startedAt={rideStartedAt}
+                        onNavigate={setScreen}
+                        onEndRide={endRide}
+                        onSos={sendSos}
+                        onSwap={(reason) => {
+                          if (!activeRideId || !activeBike) return;
+                          setSwap({ rideId: activeRideId, fromBikeId: activeBike.id, reason });
+                          setScreen('scan');
+                        }}
+                      />
+                    )}
+                    {screen === 'ride_history' && (
+                      <RideHistoryScreen
+                        user={profile}
+                        rides={rides}
+                        onNavigate={setScreen}
+                        activeBike={activeBike}
+                        rideStartedAt={rideStartedAt}
+                      />
+                    )}
+                    {screen === 'profile' && (
+                      <ProfileScreen
+                        user={profile}
+                        rides={rides}
+                        hasActiveRide={!!activeBike}
+                        onNavigate={setScreen}
+                        onLogout={logOut}
+                      />
+                    )}
+                </AccountScreenTransition>
+                <BottomNavBar current={screen} onNavigate={setScreen} />
+              </>
+            )}
           </>
         )}
       </View>
     </SafeAreaProvider>
   );
 }
+
+const appStyles = StyleSheet.create({
+  accountScreen: { flex: 1 },
+});

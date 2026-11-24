@@ -1,0 +1,70 @@
+<main class="account-login">
+  <div class="account-login__glow account-login__glow--blue"></div>
+  <div class="account-login__glow account-login__glow--gold"></div>
+
+  <section class="account-login__shell" aria-label="PedalPass administrator sign in">
+    <div class="account-login__form-panel">
+      <header class="account-login__brand">
+        <div class="account-login__brand-lockup">
+          <span class="account-login__logo"><img src="pedalpass-icon.svg" alt="" width="30" height="30" /></span>
+          <span><strong>PedalPass</strong><small>Admin Portal</small></span>
+        </div>
+      </header>
+
+      <div class="account-login__form-wrap">
+        <div class="account-login__eyebrow"><span class="icon">admin_panel_settings</span> Administrator access</div>
+        <h1>Sign in to your account</h1>
+        <p class="account-login__intro">Manage campus bicycles, rider safety, maintenance, and reports.</p>
+
+        <form class="account-login__form" [formGroup]="form" (ngSubmit)="submit()" novalidate>
+          <div class="account-login__field">
+            <label for="email">Admin email</label>
+            <div class="account-login__input-wrap">
+              <span class="icon" aria-hidden="true">alternate_email</span>
+              <input id="email" type="email" formControlName="email" autocomplete="username" placeholder="admin@dyci.edu.ph" [class.invalid]="bad('email')" />
+            </div>
+            @if (bad('email')) {
+              <span class="account-login__field-error">{{ form.controls.email.hasError('required') ? 'Enter your email.' : 'Enter a valid email address.' }}</span>
+            }
+          </div>
+
+          <div class="account-login__field">
+            <label for="password">Password</label>
+            <div class="account-login__input-wrap">
+              <span class="icon" aria-hidden="true">lock</span>
+              <input id="password" [type]="showPassword() ? 'text' : 'password'" formControlName="password" autocomplete="current-password" placeholder="Enter your password" [class.invalid]="bad('password')" />
+              <button type="button" class="account-login__visibility" (click)="showPassword.set(!showPassword())" [attr.aria-label]="showPassword() ? 'Hide password' : 'Show password'">
+                <span class="icon">{{ showPassword() ? 'visibility_off' : 'visibility' }}</span>
+              </button>
+            </div>
+            @if (bad('password')) {
+              <span class="account-login__field-error">{{ form.controls.password.hasError('required') ? 'Enter your password.' : 'Passwords have at least 6 characters.' }}</span>
+            }
+          </div>
+
+          @if (error()) {
+            <div role="alert" class="account-login__error"><span class="icon">error</span><span>{{ error() }}</span></div>
+          }
+
+          <button type="submit" class="account-login__submit" [disabled]="loading()">
+            <span class="icon" [class.account-login__spinner]="loading()">{{ loading() ? 'progress_activity' : 'login' }}</span>
+            {{ loading() ? 'Signing in…' : 'Sign in' }}
+          </button>
+        </form>
+      </div>
+    </div>
+
+    <aside class="account-login__mascot-panel">
+      <div class="account-login__grid"></div>
+      <div class="account-login__mascot-copy">
+        <span class="account-login__status"><i></i> Campus mobility operations</span>
+        <h2>Keep every campus ride moving.</h2>
+        <p>One secure workspace for the entire PedalPass bicycle network.</p>
+      </div>
+      <div class="account-login__mascot-halo"></div>
+      <button type="button" class="account-login__mascot-button" [class.shaking]="mascotShaking()" (click)="shakeMascot()" (animationend)="mascotShaking.set(false)" aria-label="Shake the PedalPass mascot">
+        <img src="pedalpass-mascot-transparent.png" alt="PedalPass campus rider mascot" class="account-login__mascot" />
+      </button>
+    </aside>
+  </section>
+</main>
